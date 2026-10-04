@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -35,8 +37,15 @@ export default function SignInPage() {
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Password</label>
-        <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-          className="w-full border border-[#DADDD5] rounded-md px-3 py-2 text-sm" />
+        <div className="relative">
+          <input type={showPassword ? 'text' : 'password'} required
+            value={password} onChange={e => setPassword(e.target.value)}
+            className="w-full border border-[#DADDD5] rounded-md px-3 py-2 pr-10 text-sm" />
+          <button type="button" onClick={() => setShowPassword(s => !s)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5B6B78]">
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
       </div>
       <button type="submit" disabled={loading}
         className="w-full bg-[#A97C33] text-white rounded-md py-2 text-sm font-medium disabled:opacity-60">

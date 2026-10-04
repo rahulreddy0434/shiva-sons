@@ -2,19 +2,28 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError(null)
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setLoading(true)
     const supabase = createClient()
     const { error } = await supabase.auth.signUp({ email, password })
     setLoading(false)
@@ -34,7 +43,20 @@ export default function SignUpPage() {
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Password</label>
-        <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)}
+        <div className="relative">
+          <input type={showPassword ? 'text' : 'password'} required minLength={6}
+            value={password} onChange={e => setPassword(e.target.value)}
+            className="w-full border border-[#DADDD5] rounded-md px-3 py-2 pr-10 text-sm" />
+          <button type="button" onClick={() => setShowPassword(s => !s)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5B6B78]">
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium mb-1">Confirm password</label>
+        <input type={showPassword ? 'text' : 'password'} required minLength={6}
+          value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
           className="w-full border border-[#DADDD5] rounded-md px-3 py-2 text-sm" />
       </div>
       <button type="submit" disabled={loading}
