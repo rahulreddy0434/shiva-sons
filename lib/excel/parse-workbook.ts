@@ -17,7 +17,7 @@ function inferType(cell: ExcelJS.Cell | undefined): InferredType {
 
 export async function parseWorkbook(buffer: Buffer): Promise<ParsedWorkbook> {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(buffer)
+  await workbook.xlsx.load(buffer as any)
 
   const sheets: ParsedWorkbook['sheets'] = []
   let sheetIndex = 0

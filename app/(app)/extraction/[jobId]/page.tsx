@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ExcelDropzone } from '@/components/upload/excel-dropzone'
+import { InstructionsForm } from '@/components/extraction/instructions-form'
+import { SchemaEditor } from '@/components/extraction/schema-editor'
 
 export default async function ExtractionJobPage({
   params,
@@ -27,12 +29,29 @@ export default async function ExtractionJobPage({
     .maybeSingle()
 
   let sheets: { sheet_name: string; workbook_columns: { column_name: string; inferred_type: string }[] }[] = []
+  let suggestedInstructions = ''
+  let schema: any = null
+
   if (workbookFile) {
     const { data } = await supabase
       .from('workbook_sheets')
       .select('sheet_name, workbook_columns(column_name, inferred_type)')
       .eq('workbook_file_id', workbookFile.id)
     sheets = data ?? []
+
+    const allColumnNames = sheets.flatMap((s) => s.workbook_columns.map((c) => c.column_name))
+    suggestedInstructions = allColumnNames.length > 0
+      ? `Extract ${allColumnNames.join(', ')} from each document.`
+      : ''
+
+    const { data: schemaData } = await supabase
+      .from('extraction_schemas')
+      .select('id, approved, extraction_fields(id, field_key, label, data_type, required, sort_order)')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    schema = schemaData
   }
 
   return (
@@ -67,6 +86,28 @@ export default async function ExtractionJobPage({
               </div>
             ))}
           </div>
+
+          <hr className="border-[#DADDD5] my-6" />
+          <p className="text-sm text-[#5B6B78] mb-3">Step 2 of 5 — Extraction instructions</p>
+
+          {!schema ? (
+            <InstructionsForm jobId={job.id} suggestedInstructions={suggestedInstructions} />
+          ) : (
+            <SchemaEditor
+              schemaId={schema.id}
+              initialApproved={schema.approved}
+              initialFields={(schema.extraction_fields ?? [])
+                .sort((a: any, b: any) => a.sort_order - b.sort_order)
+                .map((f: any) => ({
+                  id: f.id,
+                  key: f.field_key,
+                  label: f.label,
+                  dataType: f.data_type,
+                  required: f.required,
+                  sortOrder: f.sort_order,
+                }))}
+            />
+          )}
         </div>
       )}
     </div>
