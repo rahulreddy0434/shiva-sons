@@ -55,9 +55,23 @@ export function SchemaEditor({
     router.refresh()
   }
 
+  async function startOver() {
+    if (!confirm('This removes your current fields so you can write new instructions. Continue?')) return
+    setSaving(true)
+    await fetch(`/api/schema/${schemaId}`, { method: 'DELETE' })
+    setSaving(false)
+    router.refresh()
+  }
+
   return (
     <div>
-      <p className="text-sm font-medium mb-2">Fields to extract</p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium">Fields to extract</p>
+        <button type="button" onClick={startOver} className="text-xs text-[#B5522E] underline">
+          Start over with new instructions
+        </button>
+      </div>
+
       <div className="space-y-2">
         {fields.map((field, index) => (
           <div key={index} className="flex items-center gap-2 border border-[#DADDD5] rounded-md px-3 py-2 bg-[#FCFCFB]">

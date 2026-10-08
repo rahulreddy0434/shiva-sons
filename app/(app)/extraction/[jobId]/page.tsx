@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { ExcelDropzone } from '@/components/upload/excel-dropzone'
 import { InstructionsForm } from '@/components/extraction/instructions-form'
 import { SchemaEditor } from '@/components/extraction/schema-editor'
+import { DocumentDropzone } from '@/components/upload/document-dropzone'
 
 export default async function ExtractionJobPage({
   params,
@@ -53,6 +54,12 @@ export default async function ExtractionJobPage({
       .maybeSingle()
     schema = schemaData
   }
+
+  const { data: documents } = await supabase
+    .from('uploaded_documents')
+    .select('id, original_filename, file_type, page_count, status')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: false })
 
   return (
     <div>
@@ -107,6 +114,33 @@ export default async function ExtractionJobPage({
                   sortOrder: f.sort_order,
                 }))}
             />
+          )}
+
+          {schema?.approved && (
+            <>
+              <hr className="border-[#DADDD5] my-6" />
+              <p className="text-sm text-[#5B6B78] mb-3">Step 3 of 5 — Documents</p>
+              <DocumentDropzone jobId={job.id} />
+
+              {documents && documents.length > 0 && (
+                <div className="mt-5 space-y-1">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between text-sm border-b border-[#DADDD5] py-2"
+                    >
+                      <span>📄 {doc.original_filename}</span>
+                      <span className="text-[#5B6B78] text-xs">
+                        {doc.file_type.toUpperCase()} · {doc.page_count} page{doc.page_count === 1 ? '' : 's'} · {doc.status}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="text-sm text-[#5B6B78] pt-2">
+                    {documents.length} document{documents.length === 1 ? '' : 's'} ready to process.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

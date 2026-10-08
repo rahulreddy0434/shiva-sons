@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useDropzone, type FileRejection } from 'react-dropzone'
 import { useRouter } from 'next/navigation'
 
 export function ExcelDropzone({ jobId }: { jobId: string }) {
@@ -9,7 +9,12 @@ export function ExcelDropzone({ jobId }: { jobId: string }) {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[], fileRejections: FileRejection[]) => {
+    if (fileRejections.length > 0) {
+      setError(`${fileRejections[0].file.name}: unsupported file type. Please upload an .xlsx file.`)
+      return
+    }
+
     const file = acceptedFiles[0]
     if (!file) return
 
