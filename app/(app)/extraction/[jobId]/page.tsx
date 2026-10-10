@@ -4,6 +4,7 @@ import { ExcelDropzone } from '@/components/upload/excel-dropzone'
 import { InstructionsForm } from '@/components/extraction/instructions-form'
 import { SchemaEditor } from '@/components/extraction/schema-editor'
 import { DocumentDropzone } from '@/components/upload/document-dropzone'
+import { ProcessButton } from '@/components/extraction/process-button'
 
 export default async function ExtractionJobPage({
   params,
@@ -60,6 +61,23 @@ export default async function ExtractionJobPage({
     .select('id, original_filename, file_type, page_count, status')
     .eq('job_id', jobId)
     .order('created_at', { ascending: false })
+
+  const pagesByDocument = new Map<string, { page_number: number; ocr_raw: any }[]>()
+  if (documents && documents.length > 0) {
+    const { data: pages } = await supabase
+      .from('document_pages')
+      .select('document_id, page_number, ocr_raw')
+      .in('document_id', documents.map((d) => d.id))
+      .order('page_number', { ascending: true })
+
+    for (const p of pages ?? []) {
+      const list = pagesByDocument.get(p.document_id) ?? []
+      list.push(p)
+      pagesByDocument.set(p.document_id, list)
+    }
+  }
+
+  const pendingCount = documents?.filter((d) => d.status === 'uploaded').length ?? 0
 
   return (
     <div>
@@ -123,21 +141,34 @@ export default async function ExtractionJobPage({
               <DocumentDropzone jobId={job.id} />
 
               {documents && documents.length > 0 && (
-                <div className="mt-5 space-y-1">
+                <div className="mt-5 space-y-3">
                   {documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between text-sm border-b border-[#DADDD5] py-2"
-                    >
-                      <span>📄 {doc.original_filename}</span>
-                      <span className="text-[#5B6B78] text-xs">
-                        {doc.file_type.toUpperCase()} · {doc.page_count} page{doc.page_count === 1 ? '' : 's'} · {doc.status}
-                      </span>
+                    <div key={doc.id} className="border-b border-[#DADDD5] pb-2">
+                      <div className="flex items-center justify-between text-sm py-1">
+                        <span>📄 {doc.original_filename}</span>
+                        <span className="text-[#5B6B78] text-xs">
+                          {doc.file_type.toUpperCase()} · {doc.page_count} page{doc.page_count === 1 ? '' : 's'} · {doc.status}
+                        </span>
+                      </div>
+                      {pagesByDocument.get(doc.id) && (
+                        <details className="mt-1">
+                          <summary className="text-xs text-[#A97C33] cursor-pointer">View extracted text</summary>
+                          <div className="mt-2 space-y-2">
+                            {pagesByDocument.get(doc.id)!.map((p) => (
+                              <div
+                                key={p.page_number}
+                                className="text-xs bg-[#FCFCFB] border border-[#DADDD5] rounded p-2 whitespace-pre-wrap"
+                              >
+                                <p className="font-medium mb-1">Page {p.page_number}</p>
+                                {p.ocr_raw.text}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   ))}
-                  <p className="text-sm text-[#5B6B78] pt-2">
-                    {documents.length} document{documents.length === 1 ? '' : 's'} ready to process.
-                  </p>
+                  <ProcessButton jobId={job.id} pendingCount={pendingCount} />
                 </div>
               )}
             </>
