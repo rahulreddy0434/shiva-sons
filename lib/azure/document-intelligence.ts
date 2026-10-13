@@ -22,7 +22,22 @@ export interface NormalizedDocument {
   pages: NormalizedPage[]
 }
 
-function buildTable(table: any): NormalizedTable {
+// The parts of Azure's analyze result this module reads
+interface AzureTable {
+  rowCount: number
+  columnCount: number
+  cells?: { rowIndex: number; columnIndex: number; content?: string }[]
+  boundingRegions?: { pageNumber: number }[]
+}
+
+interface AzurePage {
+  pageNumber: number
+  lines?: { content: string }[]
+  width?: number
+  height?: number
+}
+
+function buildTable(table: AzureTable): NormalizedTable {
   const rows: string[][] = Array.from({ length: table.rowCount }, () => Array(table.columnCount).fill(''))
   for (const cell of table.cells ?? []) {
     rows[cell.rowIndex][cell.columnIndex] = cell.content ?? ''
@@ -80,17 +95,17 @@ export async function analyzeDocument(buffer: Buffer): Promise<NormalizedDocumen
       const analyzeResult = result.analyzeResult
 
       const tablesByPage = new Map<number, NormalizedTable[]>()
-      for (const table of analyzeResult.tables ?? []) {
+      for (const table of (analyzeResult.tables ?? []) as AzureTable[]) {
         const pageNumber = table.boundingRegions?.[0]?.pageNumber ?? 1
         const list = tablesByPage.get(pageNumber) ?? []
         list.push(buildTable(table))
         tablesByPage.set(pageNumber, list)
       }
 
-      const pages: NormalizedPage[] = (analyzeResult.pages ?? []).map((page: any) => ({
+      const pages: NormalizedPage[] = ((analyzeResult.pages ?? []) as AzurePage[]).map((page) => ({
         pageNumber: page.pageNumber,
-        text: (page.lines ?? []).map((l: any) => l.content).join('\n'),
-        lines: (page.lines ?? []).map((l: any) => l.content),
+        text: (page.lines ?? []).map((l) => l.content).join('\n'),
+        lines: (page.lines ?? []).map((l) => l.content),
         tables: tablesByPage.get(page.pageNumber) ?? [],
         width: page.width ?? 0,
         height: page.height ?? 0,

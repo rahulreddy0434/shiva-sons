@@ -59,6 +59,42 @@ export function detectHeaderRow(worksheet: ExcelJS.Worksheet): number {
   return (index === -1 ? counts.indexOf(fullest) : index) + 1
 }
 
+/** Highest row the user may name as the header row. */
+export const MAX_HEADER_ROW = 200
+
+function columnsFromRow(worksheet: ExcelJS.Worksheet, headerRowNumber: number): ParsedColumn[] {
+  const headerRow = worksheet.getRow(headerRowNumber)
+  const sampleRow = worksheet.getRow(headerRowNumber + 1)
+  const columns: ParsedColumn[] = []
+
+  headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    const name = cellText(cell)
+    if (!name) return
+    columns.push({
+      name,
+      index: colNumber - 1,
+      inferredType: inferType(sampleRow.getCell(colNumber)),
+    })
+  })
+
+  return columns
+}
+
+/**
+ * Reads one worksheet's columns from the row the user says holds the
+ * headings (a one-based row number). Returns null if the sheet is not found.
+ */
+export async function readSheetColumns(
+  buffer: Buffer,
+  sheetName: string,
+  headerRowNumber: number
+): Promise<ParsedColumn[] | null> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+  const worksheet = workbook.getWorksheet(sheetName)
+  return worksheet ? columnsFromRow(worksheet, headerRowNumber) : null
+}
+
 export async function parseWorkbook(buffer: Buffer): Promise<ParsedWorkbook> {
   const workbook = new ExcelJS.Workbook()
   // ExcelJS's Buffer typing lags behind Node's
@@ -69,19 +105,7 @@ export async function parseWorkbook(buffer: Buffer): Promise<ParsedWorkbook> {
 
   workbook.eachSheet((worksheet) => {
     const headerRowNumber = detectHeaderRow(worksheet)
-    const headerRow = worksheet.getRow(headerRowNumber)
-    const sampleRow = worksheet.getRow(headerRowNumber + 1)
-    const columns: ParsedColumn[] = []
-
-    headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      const name = cellText(cell)
-      if (!name) return
-      columns.push({
-        name,
-        index: colNumber - 1,
-        inferredType: inferType(sampleRow.getCell(colNumber)),
-      })
-    })
+    const columns = columnsFromRow(worksheet, headerRowNumber)
 
     sheets.push({
       name: worksheet.name,

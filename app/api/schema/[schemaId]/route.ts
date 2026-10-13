@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+/** A field as sent by the editor. */
+interface EditedField {
+  key: string
+  label: string
+  dataType: string
+  required: boolean
+  targetColumnId?: unknown
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ schemaId: string }> }
@@ -10,6 +19,13 @@ export async function PATCH(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  }
+
+
+  // Row level security hides other users' schemas, so "not visible" means "not yours"
+  const { data: ownSchema } = await supabase.from('extraction_schemas').select('id').eq('id', schemaId).maybeSingle()
+  if (!ownSchema) {
+    return NextResponse.json({ error: 'Field list not found' }, { status: 404 })
   }
 
   const body = await request.json()
@@ -54,7 +70,7 @@ export async function PATCH(
 
     if (body.fields.length > 0) {
       const { error: insertError } = await supabase.from('extraction_fields').insert(
-        body.fields.map((f: any, index: number) => ({
+        (body.fields as EditedField[]).map((f, index) => ({
           schema_id: schemaId,
           user_id: user.id,
           field_key: f.key,
@@ -81,6 +97,12 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  }
+
+// Row level security hides other users' schemas, so "not visible" means "not yours"
+  const { data: ownSchema } = await supabase.from('extraction_schemas').select('id').eq('id', schemaId).maybeSingle()
+  if (!ownSchema) {
+    return NextResponse.json({ error: 'Field list not found' }, { status: 404 })
   }
 
   const { error } = await supabase.from('extraction_schemas').delete().eq('id', schemaId)

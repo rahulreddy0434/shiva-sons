@@ -1,6 +1,7 @@
 import type { ExtractionField } from '@/types/extraction'
 import { groupFields } from '@/lib/review/group-fields'
 import { isValidNumber, validateRecord, type FieldIssue, type FieldValue } from './validate-record'
+import { shiftIssues } from './shift-checks'
 
 export interface CheckableRecord {
   id: string
@@ -116,7 +117,7 @@ export function validateRecords(
     const issues = validateRecord(fields, record.values)
     const taken = new Set(issues.map((i) => i.fieldKey))
 
-    const extra = [...totalMismatch(fields, record)]
+    const extra = [...totalMismatch(fields, record), ...shiftIssues(fields, record.values)]
     const duplicate = duplicateIssues.get(record.id)
     if (duplicate) extra.push(duplicate)
 

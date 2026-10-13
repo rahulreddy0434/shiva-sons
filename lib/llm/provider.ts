@@ -37,7 +37,7 @@ export interface ProposedField {
 // retried: on the free tier it usually means the daily quota is gone.
 const RETRY_DELAYS_MS = [2000, 6000]
 
-async function generateJson(prompt: string): Promise<any> {
+async function generateJson(prompt: string): Promise<unknown> {
   let response
   for (let attempt = 0; ; attempt++) {
     try {
@@ -49,8 +49,8 @@ async function generateJson(prompt: string): Promise<any> {
         },
       })
       break
-    } catch (err: any) {
-      const transient = err?.status === 503
+    } catch (err) {
+      const transient = (err as { status?: number } | null)?.status === 503
       if (!transient || attempt >= RETRY_DELAYS_MS.length) throw err
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
     }
@@ -80,7 +80,9 @@ export async function extractStructuredData({
 }): Promise<ExtractedRecord[]> {
   if (isMockMode()) return mockExtractStructuredData(fields, pages)
 
-  const parsed = await generateJson(buildExtractionPrompt({ instructions, fields, pages }))
+  const parsed = (await generateJson(buildExtractionPrompt({ instructions, fields, pages }))) as {
+    records?: unknown
+  } | null
 
   if (!parsed || !Array.isArray(parsed.records)) {
     throw new Error('Gemini response was missing a "records" array')
@@ -98,7 +100,7 @@ export async function proposeSchemaFields({
 }): Promise<ProposedField[]> {
   if (isMockMode()) return mockProposeSchemaFields(sheets)
 
-  const parsed = await generateJson(buildSchemaPrompt({ instructions, sheets }))
+  const parsed = (await generateJson(buildSchemaPrompt({ instructions, sheets }))) as { fields?: unknown } | null
 
   if (!parsed || !Array.isArray(parsed.fields)) {
     throw new Error('Gemini response was missing a "fields" array')

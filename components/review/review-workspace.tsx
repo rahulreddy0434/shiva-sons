@@ -27,6 +27,8 @@ export interface ReviewDocument {
   status: string
   /** Short-lived signed URL; null if the file could not be opened. */
   url: string | null
+  /** True when the original was removed under the retention policy. */
+  purged: boolean
   pages: ReviewPage[]
 }
 

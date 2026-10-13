@@ -13,7 +13,7 @@ export const WIZARD_STEPS = [
 export type StepSlug = (typeof WIZARD_STEPS)[number]['slug']
 
 export interface JobProgress {
-  job: { id: string; name: string }
+  job: { id: string; name: string; updated_at: string }
   /** One entry per wizard step, in order. */
   unlocked: boolean[]
   completed: boolean[]
@@ -31,7 +31,7 @@ export const getJobProgress = cache(async (jobId: string): Promise<JobProgress |
 
   const { data: job } = await supabase
     .from('extraction_jobs')
-    .select('id, name')
+    .select('id, name, updated_at')
     .eq('id', jobId)
     .maybeSingle()
 

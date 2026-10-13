@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { after } from 'next/server'
 import { JobsTable } from '@/components/jobs/jobs-table'
+import { purgeExpiredDocuments } from '@/lib/retention'
 
 const RECENT_JOBS = 5
 
@@ -11,6 +13,16 @@ export default async function DashboardPage() {
     .select('id, name, status, created_at, updated_at', { count: 'exact' })
     .order('updated_at', { ascending: false })
     .limit(RECENT_JOBS)
+
+  // Retention: remove the originals of this user's long-untouched jobs.
+  // Scheduled after the response so it never slows the page down.
+  after(async () => {
+    try {
+      await purgeExpiredDocuments(supabase)
+    } catch (err) {
+      console.warn('Retention purge failed:', err instanceof Error ? err.message : err)
+    }
+  })
 
   return (
     <div className="max-w-4xl">

@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
-import { parseWorkbook } from './parse-workbook'
+import { parseWorkbook, readSheetColumns } from './parse-workbook'
 import { buildStarterTemplate, STARTER_COLUMNS } from './starter-template'
 
 async function toBuffer(build: (wb: ExcelJS.Workbook) => void): Promise<Buffer> {
@@ -82,6 +82,32 @@ describe('parseWorkbook', () => {
 
   it('rejects something that is not a workbook', async () => {
     await expect(parseWorkbook(Buffer.from('not a spreadsheet'))).rejects.toThrow()
+  })
+})
+
+describe('readSheetColumns', () => {
+  it('reads the headings from the row the user names, overriding detection', async () => {
+    const buffer = await toBuffer((wb) => {
+      const ws = wb.addWorksheet('Data')
+      ws.addRow(['Region', 'North', 'South', 'East', 'West'])
+      ws.addRow(['ID', 'NAME', 'HOURS'])
+      ws.addRow(['1', 'Asha', 8])
+    })
+    // Detection picks the fuller first row; the user knows it is row 2
+    expect((await parseWorkbook(buffer)).sheets[0].headerRowIndex).toBe(0)
+    expect(await readSheetColumns(buffer, 'Data', 2)).toEqual([
+      { name: 'ID', index: 0, inferredType: 'text' },
+      { name: 'NAME', index: 1, inferredType: 'text' },
+      { name: 'HOURS', index: 2, inferredType: 'number' },
+    ])
+  })
+
+  it('returns no columns for an empty row and null for an unknown sheet', async () => {
+    const buffer = await toBuffer((wb) => {
+      wb.addWorksheet('Data').addRow(['ID', 'NAME'])
+    })
+    expect(await readSheetColumns(buffer, 'Data', 9)).toEqual([])
+    expect(await readSheetColumns(buffer, 'Missing', 1)).toBeNull()
   })
 })
 

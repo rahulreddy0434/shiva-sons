@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { RETENTION_DAYS } from '@/lib/retention'
 import type { ReviewDocument } from './review-workspace'
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3]
@@ -29,7 +30,7 @@ export function DocumentViewer({
   const doc = documents.find((d) => d.id === documentId)
   const pageCount = Math.max(doc?.pages.length ?? 0, 1)
   const isPdf = doc?.fileType === 'pdf'
-  const unread = doc ? doc.pages.length === 0 : false
+  const unread = doc ? doc.pages.length === 0 && !doc.purged : false
 
   return (
     <section
@@ -131,7 +132,12 @@ export function DocumentViewer({
       )}
 
       <div className="min-h-[60vh] flex-1 overflow-auto bg-surface lg:min-h-0">
-        {!doc?.url ? (
+        {doc?.purged ? (
+          <p className="p-4 text-sm text-ink-muted">
+            The original of this document was removed {RETENTION_DAYS} days after the job was last changed, under the
+            data-retention policy. The extracted data below is still available.
+          </p>
+        ) : !doc?.url ? (
           <p className="p-4 text-sm text-danger">✕ The original file could not be opened.</p>
         ) : isPdf ? (
           // Keyed so that changing page reloads the viewer at that page
