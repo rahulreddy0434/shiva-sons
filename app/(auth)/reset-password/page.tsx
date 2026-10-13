@@ -38,13 +38,13 @@ export default function ResetPasswordPage() {
 
   if (mode === 'update') {
     return (
-      <form onSubmit={updatePassword} className="bg-white border border-[#DADDD5] rounded-lg p-7 space-y-4">
+      <form onSubmit={updatePassword} className="bg-white border border-line rounded-lg p-7 space-y-4">
         <h1 className="text-lg font-medium">Set a new password</h1>
-        {error && <p className="text-sm text-[#B5522E]">{error}</p>}
-        {message && <p className="text-sm text-[#3F6B4E]">{message}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
+        {message && <p className="text-sm text-success">{message}</p>}
         <input type="password" required minLength={6} value={newPassword} onChange={e => setNewPassword(e.target.value)}
-          className="w-full border border-[#DADDD5] rounded-md px-3 py-2 text-sm" placeholder="New password" />
-        <button type="submit" className="w-full bg-[#A97C33] text-white rounded-md py-2 text-sm font-medium">
+          className="w-full border border-line rounded-md px-3 py-2 text-sm" placeholder="New password" />
+        <button type="submit" className="w-full bg-brand text-white rounded-md py-2 text-sm font-medium">
           Update password
         </button>
       </form>
@@ -52,13 +52,13 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <form onSubmit={requestReset} className="bg-white border border-[#DADDD5] rounded-lg p-7 space-y-4">
+    <form onSubmit={requestReset} className="bg-white border border-line rounded-lg p-7 space-y-4">
       <h1 className="text-lg font-medium">Reset your password</h1>
-      {error && <p className="text-sm text-[#B5522E]">{error}</p>}
-      {message && <p className="text-sm text-[#3F6B4E]">{message}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {message && <p className="text-sm text-success">{message}</p>}
       <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-        className="w-full border border-[#DADDD5] rounded-md px-3 py-2 text-sm" placeholder="Email" />
-      <button type="submit" className="w-full bg-[#A97C33] text-white rounded-md py-2 text-sm font-medium">
+        className="w-full border border-line rounded-md px-3 py-2 text-sm" placeholder="Email" />
+      <button type="submit" className="w-full bg-brand text-white rounded-md py-2 text-sm font-medium">
         Send reset link
       </button>
     </form>

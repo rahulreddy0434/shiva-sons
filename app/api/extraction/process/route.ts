@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { analyzeDocument } from '@/lib/azure/document-intelligence'
 
 export async function POST(request: Request) {
@@ -23,6 +24,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: docError?.message ?? 'Document not found' }, { status: 404 })
   }
 
+  const limited = await checkRateLimit(supabase, user.id, 'ocr')
+  if (limited) {
+    return NextResponse.json({ error: limited }, { status: 429 })
+  }
+
   try {
     await supabase.from('uploaded_documents').update({ status: 'processing' }).eq('id', documentId)
 
@@ -36,19 +42,31 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await fileBlob.arrayBuffer())
     const result = await analyzeDocument(buffer)
 
-    for (const page of result.pages) {
-      await supabase.from('document_pages').insert({
+    // Upsert on (document, page) so retrying OCR replaces pages instead of duplicating them
+    const { error: pagesError } = await supabase.from('document_pages').upsert(
+      result.pages.map((page) => ({
         document_id: documentId,
         user_id: user.id,
         page_number: page.pageNumber,
         ocr_raw: page,
-      })
-    }
+      })),
+      { onConflict: 'document_id,page_number' }
+    )
+    if (pagesError) throw new Error(pagesError.message)
 
-    await supabase.from('uploaded_documents').update({ status: 'ocr_complete' }).eq('id', documentId)
+    await supabase
+      .from('uploaded_documents')
+      .update({ status: 'ocr_complete', error_message: null })
+      .eq('id', documentId)
     return NextResponse.json({ ok: true })
-  } catch (err: any) {
-    await supabase.from('uploaded_documents').update({ status: 'failed' }).eq('id', documentId)
-    return NextResponse.json({ error: err?.message ?? 'OCR failed' }, { status: 500 })
+  } catch (err) {
+    const message = 'This document could not be read. Check that the file opens normally, then try again.'
+    // Log the cause for the developer, never the document's contents
+    console.error(`OCR failed for document ${documentId}:`, err instanceof Error ? err.message.slice(0, 300) : err)
+    await supabase
+      .from('uploaded_documents')
+      .update({ status: 'failed', error_message: message })
+      .eq('id', documentId)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

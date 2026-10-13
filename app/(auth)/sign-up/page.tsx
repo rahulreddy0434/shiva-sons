@@ -32,23 +32,23 @@ export default function SignUpPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-[#DADDD5] rounded-lg p-7 space-y-4">
+    <form onSubmit={handleSubmit} className="bg-white border border-line rounded-lg p-7 space-y-4">
       <h1 className="text-lg font-medium">Create an account</h1>
-      {error && <p className="text-sm text-[#B5522E]">{error}</p>}
-      {message && <p className="text-sm text-[#3F6B4E]">{message}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {message && <p className="text-sm text-success">{message}</p>}
       <div>
         <label className="block text-sm font-medium mb-1">Email</label>
         <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-          className="w-full border border-[#DADDD5] rounded-md px-3 py-2 text-sm" />
+          className="w-full border border-line rounded-md px-3 py-2 text-sm" />
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Password</label>
         <div className="relative">
           <input type={showPassword ? 'text' : 'password'} required minLength={6}
             value={password} onChange={e => setPassword(e.target.value)}
-            className="w-full border border-[#DADDD5] rounded-md px-3 py-2 pr-10 text-sm" />
+            className="w-full border border-line rounded-md px-3 py-2 pr-10 text-sm" />
           <button type="button" onClick={() => setShowPassword(s => !s)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5B6B78]">
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted">
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
@@ -57,14 +57,14 @@ export default function SignUpPage() {
         <label className="block text-sm font-medium mb-1">Confirm password</label>
         <input type={showPassword ? 'text' : 'password'} required minLength={6}
           value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-          className="w-full border border-[#DADDD5] rounded-md px-3 py-2 text-sm" />
+          className="w-full border border-line rounded-md px-3 py-2 text-sm" />
       </div>
       <button type="submit" disabled={loading}
-        className="w-full bg-[#A97C33] text-white rounded-md py-2 text-sm font-medium disabled:opacity-60">
+        className="w-full bg-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-60">
         {loading ? 'Creating account…' : 'Sign up'}
       </button>
-      <p className="text-sm text-center text-[#5B6B78]">
-        Already have an account? <Link href="/sign-in" className="text-[#A97C33]">Sign in</Link>
+      <p className="text-sm text-center text-ink-muted">
+        Already have an account? <Link href="/sign-in" className="text-brand-blue hover:underline">Sign in</Link>
       </p>
     </form>
   )

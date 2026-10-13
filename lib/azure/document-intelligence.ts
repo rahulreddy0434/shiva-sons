@@ -1,3 +1,6 @@
+import { isMockMode } from '@/lib/mock/mode'
+import { mockAnalyzeDocument } from './mock'
+
 const API_VERSION = '2024-11-30'
 
 interface NormalizedTable {
@@ -37,6 +40,8 @@ function sleep(ms: number) {
  * Azure's raw response format directly.
  */
 export async function analyzeDocument(buffer: Buffer): Promise<NormalizedDocument> {
+  if (isMockMode()) return mockAnalyzeDocument(buffer)
+
   const endpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT!.replace(/\/$/, '')
   const key = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY!
 

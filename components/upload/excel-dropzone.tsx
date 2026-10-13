@@ -50,7 +50,7 @@ export function ExcelDropzone({ jobId }: { jobId: string }) {
       <div
         {...getRootProps()}
         className={`border-[1.5px] border-dashed rounded-lg p-9 text-center text-sm cursor-pointer transition-colors ${
-          isDragActive ? 'border-[#A97C33] bg-[#FBF6EE]' : 'border-[#DADDD5] text-[#5B6B78]'
+          isDragActive ? 'border-brand bg-brand-soft' : 'border-line text-ink-muted'
         }`}
       >
         <input {...getInputProps()} />
@@ -59,10 +59,10 @@ export function ExcelDropzone({ jobId }: { jobId: string }) {
         ) : isDragActive ? (
           <p>Drop the file here…</p>
         ) : (
-          <p>Drag and drop your Excel template here, or <strong className="text-[#1E2B3A]">browse files</strong></p>
+          <p>Drag and drop your Excel template here, or <strong className="text-ink">browse files</strong></p>
         )}
       </div>
-      {error && <p className="text-sm text-[#B5522E] mt-3">{error}</p>}
+      {error && <p className="text-sm text-danger mt-3">{error}</p>}
     </div>
   )
 }

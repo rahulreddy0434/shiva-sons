@@ -4,6 +4,26 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Shiva Sons brand tokens — the only place app colours are defined.
+ * Light background, orange as the primary accent, blue as the secondary.
+ * Use these as utilities: bg-brand, text-ink-muted, border-line, …
+ */
+@theme {
+  --color-brand: #ea580c;        /* primary actions, active state */
+  --color-brand-strong: #c2410c; /* orange text on white, hover */
+  --color-brand-soft: #fff7ed;   /* orange tint backgrounds */
+  --color-brand-blue: #1d4ed8;   /* secondary actions, links */
+  --color-brand-blue-soft: #eff6ff;
+  --color-ink: #0f172a;          /* headings and body text */
+  --color-ink-muted: #64748b;    /* secondary text */
+  --color-ink-faint: #94a3b8;    /* disabled, placeholders */
+  --color-line: #e2e8f0;         /* borders and dividers */
+  --color-surface: #f8fafc;      /* page background, subtle panels */
+  --color-success: #15803d;      /* done, saved */
+  --color-danger: #dc2626;       /* destructive actions, errors */
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -49,6 +69,7 @@
 }
 
 :root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

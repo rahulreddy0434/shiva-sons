@@ -10,6 +10,7 @@ export function ProcessButton({ pendingDocumentIds }: { pendingDocumentIds: stri
   const [completedCount, setCompletedCount] = useState(0)
   const [failedCount, setFailedCount] = useState(0)
   const [skippedCount, setSkippedCount] = useState(0)
+  const [failureReasons, setFailureReasons] = useState<string[]>([])
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const cancelRequested = useRef(false)
   const router = useRouter()
@@ -28,6 +29,7 @@ export function ProcessButton({ pendingDocumentIds }: { pendingDocumentIds: stri
     setCompletedCount(0)
     setFailedCount(0)
     setSkippedCount(0)
+    setFailureReasons([])
     setElapsedSeconds(0)
 
     for (let i = 0; i < pendingDocumentIds.length; i++) {
@@ -43,8 +45,14 @@ export function ProcessButton({ pendingDocumentIds }: { pendingDocumentIds: stri
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: pendingDocumentIds[i] }),
       })
-      if (res.ok) setCompletedCount((c) => c + 1)
-      else setFailedCount((f) => f + 1)
+      if (res.ok) {
+        setCompletedCount((c) => c + 1)
+      } else {
+        setFailedCount((f) => f + 1)
+        const result = await res.json().catch(() => ({}))
+        const reason: string = result.error ?? 'Something went wrong.'
+        setFailureReasons((prev) => (prev.includes(reason) ? prev : [...prev, reason]))
+      }
     }
 
     setProcessing(false)
@@ -68,7 +76,7 @@ export function ProcessButton({ pendingDocumentIds }: { pendingDocumentIds: stri
             type="button"
             onClick={handleProcess}
             disabled={processing}
-            className="bg-[#A97C33] text-white text-sm font-medium rounded-md px-4 py-2 disabled:opacity-60"
+            className="bg-brand text-white text-sm font-medium rounded-md px-4 py-2 disabled:opacity-60"
           >
             {processing
               ? `Reading document ${currentIndex} of ${pendingDocumentIds.length}… (${elapsedSeconds}s)`
@@ -79,7 +87,7 @@ export function ProcessButton({ pendingDocumentIds }: { pendingDocumentIds: stri
               type="button"
               onClick={handleCancel}
               disabled={cancelling}
-              className="text-sm border border-[#B5522E] text-[#B5522E] rounded-md px-4 py-2 disabled:opacity-60"
+              className="text-sm border border-danger text-danger rounded-md px-4 py-2 disabled:opacity-60"
             >
               {cancelling ? 'Stopping after this document…' : 'Cancel'}
             </button>
@@ -87,12 +95,18 @@ export function ProcessButton({ pendingDocumentIds }: { pendingDocumentIds: stri
         </div>
       )}
       {finished && (
-        <p className="text-sm text-[#5B6B78] mt-2">
+        <p className="text-sm text-ink-muted mt-2">
           {skippedCount > 0 && 'Cancelled — '}
           {completedCount} processed, {failedCount} failed
           {skippedCount > 0 && `, ${skippedCount} not started`}.
         </p>
       )}
+      {!processing &&
+        failureReasons.map((reason) => (
+          <p key={reason} className="text-sm text-danger mt-1">
+            ✕ {reason}
+          </p>
+        ))}
     </div>
   )
 }

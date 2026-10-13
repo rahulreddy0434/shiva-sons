@@ -30,7 +30,10 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/sign-up') ||
     request.nextUrl.pathname.startsWith('/reset-password')
 
-  if (!user && !isAuthRoute) {
+  // The marketing site is open to everyone
+  const isPublicRoute = ['/', '/privacy', '/terms'].includes(request.nextUrl.pathname)
+
+  if (!user && !isAuthRoute && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/sign-in'
     return NextResponse.redirect(url)

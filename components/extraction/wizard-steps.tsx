@@ -32,18 +32,18 @@ export function StepIndicator({ jobId, steps, unlocked, completed }: WizardProps
         const locked = !unlocked[index]
 
         const circleClass = active
-          ? 'bg-[#A97C33] border-[#A97C33] text-white'
+          ? 'bg-brand border-brand text-white'
           : done
-            ? 'bg-[#3F6B4E] border-[#3F6B4E] text-white'
+            ? 'bg-success border-success text-white'
             : locked
-              ? 'bg-[#F1F3EF] border-[#DADDD5] text-[#9AA5A0]'
-              : 'bg-white border-[#A97C33] text-[#A97C33]'
+              ? 'bg-surface border-line text-ink-faint'
+              : 'bg-white border-brand-blue text-brand-blue'
 
         const labelClass = active
-          ? 'text-[#1E2B3A] font-medium'
+          ? 'text-ink font-medium'
           : locked
-            ? 'text-[#9AA5A0]'
-            : 'text-[#5B6B78]'
+            ? 'text-ink-faint'
+            : 'text-ink-muted'
 
         const content = (
           <>
@@ -52,7 +52,7 @@ export function StepIndicator({ jobId, steps, unlocked, completed }: WizardProps
             >
               {done ? '✓' : index + 1}
             </span>
-            <span className={`mt-2 text-xs whitespace-nowrap ${labelClass}`}>{step.label}</span>
+            <span className={`mt-2 text-center text-[11px] leading-tight sm:text-xs sm:whitespace-nowrap ${labelClass}`}>{step.label}</span>
           </>
         )
 
@@ -61,10 +61,10 @@ export function StepIndicator({ jobId, steps, unlocked, completed }: WizardProps
             {index > 0 && (
               <li
                 aria-hidden
-                className={`mt-4 h-px flex-1 ${completed[index - 1] ? 'bg-[#3F6B4E]' : 'bg-[#DADDD5]'}`}
+                className={`mt-4 h-px flex-1 ${completed[index - 1] ? 'bg-success' : 'bg-line'}`}
               />
             )}
-            <li className="w-24 shrink-0">
+            <li className="w-14 shrink-0 sm:w-24">
               {locked ? (
                 <span className="flex flex-col items-center cursor-not-allowed" aria-disabled>
                   {content}
@@ -95,11 +95,11 @@ export function StepNav({ jobId, steps, unlocked }: Omit<WizardProps, 'completed
   const nextLocked = next ? !unlocked[activeIndex + 1] : false
 
   return (
-    <div className="mt-8 pt-5 border-t border-[#DADDD5] flex items-center justify-between">
+    <div className="mt-8 pt-5 border-t border-line flex items-center justify-between">
       {previous ? (
         <Link
           href={`/extraction/${jobId}/${previous.slug}`}
-          className="text-sm border border-[#DADDD5] rounded-md px-4 py-2 text-[#1E2B3A] bg-white"
+          className="text-sm border border-line rounded-md px-4 py-2 text-ink bg-white"
         >
           ← Back
         </Link>
@@ -110,20 +110,20 @@ export function StepNav({ jobId, steps, unlocked }: Omit<WizardProps, 'completed
       {next && (
         <div className="flex items-center gap-3">
           {nextLocked && (
-            <span className="text-xs text-[#5B6B78]">Finish this step to continue.</span>
+            <span className="text-xs text-ink-muted">Finish this step to continue.</span>
           )}
           {nextLocked ? (
             <button
               type="button"
               disabled
-              className="bg-[#A97C33] text-white text-sm font-medium rounded-md px-4 py-2 opacity-40 cursor-not-allowed"
+              className="bg-brand text-white text-sm font-medium rounded-md px-4 py-2 opacity-40 cursor-not-allowed"
             >
               Next →
             </button>
           ) : (
             <Link
               href={`/extraction/${jobId}/${next.slug}`}
-              className="bg-[#A97C33] text-white text-sm font-medium rounded-md px-4 py-2"
+              className="bg-brand text-white text-sm font-medium rounded-md px-4 py-2"
             >
               Next →
             </Link>

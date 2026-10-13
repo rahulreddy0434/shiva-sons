@@ -48,14 +48,14 @@ export function DeleteJobButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={className ?? 'text-sm border border-[#B5522E] text-[#B5522E] rounded-md px-3 py-1.5'}
+        className={className ?? 'text-sm border border-danger text-danger rounded-md px-3 py-1.5'}
       >
         Delete
       </button>
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#1E2B3A]/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center whitespace-normal bg-ink/40 p-4 text-left text-base font-normal"
           onClick={close}
         >
           <div
@@ -63,22 +63,22 @@ export function DeleteJobButton({
             aria-modal="true"
             aria-labelledby="delete-job-title"
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white border border-[#DADDD5] rounded-lg p-6 text-left"
+            className="w-full max-w-md bg-white border border-line rounded-lg p-6 text-left"
           >
-            <h2 id="delete-job-title" className="text-lg font-medium text-[#1E2B3A]">
+            <h2 id="delete-job-title" className="text-lg font-medium text-ink">
               Delete this job?
             </h2>
-            <p className="text-sm text-[#5B6B78] mt-2">
-              <span className="text-[#1E2B3A] font-medium">{jobName}</span> will be permanently removed, along with
-              its Excel template, uploaded documents, and everything extracted from them. This can&apos;t be undone.
+            <p className="text-sm text-ink-muted mt-2 break-words">
+              <span className="text-ink font-medium">{jobName}</span> will be permanently removed, along with its
+              Excel template, uploaded documents, and everything extracted from them. This can&apos;t be undone.
             </p>
-            {error && <p className="text-sm text-[#B5522E] mt-3">{error}</p>}
+            {error && <p className="text-sm text-danger mt-3">{error}</p>}
             <div className="flex justify-end gap-3 mt-6">
               <button
                 type="button"
                 onClick={close}
                 disabled={deleting}
-                className="text-sm border border-[#DADDD5] rounded-md px-4 py-2 disabled:opacity-60"
+                className="text-sm border border-line rounded-md px-4 py-2 disabled:opacity-60"
               >
                 Keep job
               </button>
@@ -86,7 +86,7 @@ export function DeleteJobButton({
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="text-sm bg-[#B5522E] text-white font-medium rounded-md px-4 py-2 disabled:opacity-60"
+                className="text-sm bg-danger text-white font-medium rounded-md px-4 py-2 disabled:opacity-60"
               >
                 {deleting ? 'Deleting…' : 'Delete job'}
               </button>

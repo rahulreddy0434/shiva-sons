@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { extractStructuredData } from '@/lib/llm/provider'
+import { describeLlmError } from '@/lib/llm/errors'
+import { isEmptyRecord, normalizeRecord } from '@/lib/extraction/normalize-records'
+import { refreshJobStatus } from '@/lib/review/load-job'
+import type { ExtractionField } from '@/types/extraction'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -24,7 +29,7 @@ export async function POST(request: Request) {
 
   const { data: schema } = await supabase
     .from('extraction_schemas')
-    .select('id, extraction_fields(field_key, label, data_type, required)')
+    .select('id, extraction_fields(field_key, label, data_type, required, sort_order)')
     .eq('job_id', jobId)
     .eq('approved', true)
     .order('created_at', { ascending: false })
@@ -35,57 +40,101 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No approved schema for this job yet' }, { status: 400 })
   }
 
-  const fields = (schema.extraction_fields ?? []).map((f: any) => ({
-    key: f.field_key,
-    label: f.label,
-    dataType: f.data_type,
-    required: f.required,
-    sortOrder: 0,
-  }))
+  const fields: ExtractionField[] = (schema.extraction_fields ?? [])
+    .map((f) => ({
+      key: f.field_key,
+      label: f.label,
+      dataType: f.data_type as ExtractionField['dataType'],
+      required: f.required,
+      sortOrder: f.sort_order,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const { data: pages } = await supabase
+    .from('document_pages')
+    .select('id, page_number, text:ocr_raw->>text, tables:ocr_raw->tables')
+    .eq('document_id', documentId)
+    .order('page_number', { ascending: true })
+
+  if (!pages || pages.length === 0) {
+    return NextResponse.json({ error: 'This document has not been read yet — run OCR first.' }, { status: 400 })
+  }
+
+  const limited = await checkRateLimit(supabase, user.id, 'extract')
+  if (limited) {
+    return NextResponse.json({ error: limited }, { status: 429 })
+  }
 
   try {
-    const { data: pages } = await supabase
-      .from('document_pages')
-      .select('id, page_number, ocr_raw')
-      .eq('document_id', documentId)
-      .order('page_number', { ascending: true })
+    // Re-running must not duplicate: clear what an earlier (failed or
+    // partial) run extracted from these pages. Records a person added are kept.
+    const { error: clearError } = await supabase
+      .from('extraction_records')
+      .delete()
+      .in('document_page_id', pages.map((p) => p.id))
+      .eq('source', 'extracted')
+    if (clearError) throw new Error(clearError.message)
 
-    for (const page of pages ?? []) {
-      const records = await extractStructuredData({
-        instructions: instructionsRow?.instructions_text ?? '',
-        fields,
-        pageText: (page.ocr_raw as any)?.text ?? '',
-      })
+    // The whole document goes in one call: a time card often runs over two
+    // pages and must come back as one record, not two halves.
+    const records = await extractStructuredData({
+      instructions: instructionsRow?.instructions_text ?? '',
+      fields,
+      pages: pages.map((page) => ({
+        pageNumber: page.page_number,
+        text: (page.text as string | null) ?? '',
+        tables: ((page.tables as { rows: string[][] }[] | null) ?? []).map((t) => t.rows),
+      })),
+    })
 
-      for (const record of records) {
-        const { data: recordRow, error: recordError } = await supabase
-          .from('extraction_records')
-          .insert({ job_id: jobId, document_page_id: page.id, user_id: user.id, status: 'extracted' })
-          .select()
-          .single()
-        if (recordError || !recordRow) throw new Error(recordError?.message ?? 'Could not create record')
+    for (const record of records) {
+      const results = normalizeRecord(record?.fields, fields)
+      if (isEmptyRecord(results)) continue
 
-        const fieldRows = Object.entries(record).map(([fieldKey, result]) => ({
+      // Attach the record to the page it starts on; fall back to the first page
+      const startPage = pages.find((p) => p.page_number === Number(record?.page)) ?? pages[0]
+
+      const { data: recordRow, error: recordError } = await supabase
+        .from('extraction_records')
+        .insert({ job_id: jobId, document_page_id: startPage.id, user_id: user.id, status: 'extracted' })
+        .select()
+        .single()
+      if (recordError || !recordRow) throw new Error(recordError?.message ?? 'Could not create record')
+
+      const { error: fieldsError } = await supabase.from('extracted_fields').insert(
+        results.map((r) => ({
           record_id: recordRow.id,
           user_id: user.id,
-          field_key: fieldKey,
-          value: result.value === null ? null : String(result.value),
-          confidence: result.confidence,
-          status: result.status,
-          original_ai_value: result.value === null ? null : String(result.value),
+          field_key: r.fieldKey,
+          value: r.value,
+          confidence: r.confidence,
+          status: r.status,
+          original_ai_value: r.value,
         }))
-
-        if (fieldRows.length > 0) {
-          const { error: fieldsError } = await supabase.from('extracted_fields').insert(fieldRows)
-          if (fieldsError) throw new Error(fieldsError.message)
-        }
-      }
+      )
+      if (fieldsError) throw new Error(fieldsError.message)
     }
 
-    await supabase.from('uploaded_documents').update({ status: 'extraction_complete' }).eq('id', documentId)
+    await supabase
+      .from('uploaded_documents')
+      .update({ status: 'extraction_complete', error_message: null })
+      .eq('id', documentId)
+    // Re-extracting replaces records, so an earlier approval no longer covers the data
+    await supabase
+      .from('job_approvals')
+      .update({ superseded_at: new Date().toISOString() })
+      .eq('job_id', jobId)
+      .is('superseded_at', null)
+    await refreshJobStatus(supabase, jobId)
     return NextResponse.json({ ok: true })
-  } catch (err: any) {
-    await supabase.from('uploaded_documents').update({ status: 'failed' }).eq('id', documentId)
-    return NextResponse.json({ error: err?.message ?? 'Extraction failed' }, { status: 500 })
+  } catch (err) {
+    const message = describeLlmError(err)
+    // Log the cause for the developer, never the document's contents
+    console.error(`Extraction failed for document ${documentId}:`, err instanceof Error ? err.message : err)
+    await supabase
+      .from('uploaded_documents')
+      .update({ status: 'failed', error_message: message })
+      .eq('id', documentId)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

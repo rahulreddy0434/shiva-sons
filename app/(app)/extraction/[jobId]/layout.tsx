@@ -18,16 +18,16 @@ export default async function ExtractionJobLayout({
   const { job, unlocked, completed } = progress
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-medium text-[#1E2B3A]">{job.name}</h1>
+    <div>
+      <div className="max-w-4xl flex items-start justify-between gap-4">
+        <h1 className="text-2xl font-medium text-ink">{job.name}</h1>
         <DeleteJobButton jobId={job.id} jobName={job.name} redirectTo="/dashboard" />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 max-w-4xl">
         <StepIndicator jobId={job.id} steps={WIZARD_STEPS} unlocked={unlocked} completed={completed} />
       </div>
-      <hr className="border-[#DADDD5] my-6" />
+      <hr className="border-line my-6" />
 
       {children}
 

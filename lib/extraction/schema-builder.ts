@@ -1,6 +1,8 @@
 import type { ExtractionField } from '@/types/extraction'
 import { proposeSchemaFields } from '@/lib/llm/provider'
 import type { WorkbookSheetSummary } from '@/lib/llm/prompts'
+import { guessType } from './guess-type'
+import { isDayOfMonthHeader } from './suggested-instructions'
 
 function toKey(label: string): string {
   return label
@@ -10,28 +12,42 @@ function toKey(label: string): string {
     .replace(/^_+|_+$/g, '')
 }
 
-function guessType(label: string): ExtractionField['dataType'] {
-  const l = label.toLowerCase()
-  if (l.includes('date')) return 'date'
-  if (l.includes('time') && !l.includes('overtime')) return 'time'
-  if (l.includes('break') || l.includes('duration')) return 'duration'
-  if (l.includes('hours') || l.includes('id') || l.includes('number')) return 'number'
-  return 'string'
+const TYPE_FROM_SAMPLE: Record<string, ExtractionField['dataType']> = {
+  date: 'date',
+  time: 'time',
+  duration: 'duration',
+  number: 'number',
 }
 
 /**
- * Builds a starting field list straight from the workbook's own column
- * names. Used both as the "suggested instruction" fallback (§7 of the
- * spec) and as the schema when the user accepts it as-is.
+ * Builds the field list straight from the template's columns, one field per
+ * column, without any AI: for when the user just wants their columns filled,
+ * or the AI service is unavailable. Types come from the column's sample data
+ * where the template has some, otherwise from its name; day-of-month columns
+ * are numbers. Nothing is marked required — that is the user's call.
  */
-export function buildFieldsFromColumns(columnNames: string[]): ExtractionField[] {
-  return columnNames.map((name, index) => ({
-    key: toKey(name),
-    label: name,
-    dataType: guessType(name),
-    required: false,
-    sortOrder: index,
-  }))
+export function buildFieldsFromColumns(sheets: WorkbookSheetSummary[]): ExtractionField[] {
+  // One worksheet only: the first that has headings
+  const sheet = sheets.find((s) => s.columns.length > 0)
+  if (!sheet) return []
+
+  const usedKeys = new Set<string>()
+  return sheet.columns.map((column, index) => {
+    const day = isDayOfMonthHeader(column.name)
+    const baseKey = (day ? `day_${column.name.trim()}` : toKey(column.name)) || `field_${index + 1}`
+    let key = baseKey
+    for (let n = 2; usedKeys.has(key); n++) key = `${baseKey}_${n}`
+    usedKeys.add(key)
+
+    return {
+      key,
+      label: column.name,
+      dataType: day ? 'number' : (TYPE_FROM_SAMPLE[column.inferredType] ?? guessType(column.name)),
+      required: false,
+      sortOrder: index,
+      targetColumn: column.name,
+    }
+  })
 }
 
 const DATA_TYPES: ExtractionField['dataType'][] = ['string', 'date', 'time', 'duration', 'number']
@@ -39,9 +55,9 @@ const DATA_TYPES: ExtractionField['dataType'][] = ['string', 'date', 'time', 'du
 /**
  * Asks the LLM to propose a starting field list from the user's
  * instructions plus the workbook's actual columns, so it can reason about
- * what the columns mean (e.g. that day-of-month columns 1–31 are one
- * repeating field, not 31 separate ones). The model's answer is cleaned up
- * here before anything is saved; the user still edits and approves it.
+ * what the columns mean (e.g. that columns 1–31 are days of the month, each
+ * needing its own value). The model's answer is cleaned up here before
+ * anything is saved; the user still edits and approves it.
  */
 export async function buildFieldsFromInstructions(
   instructions: string,
@@ -51,6 +67,8 @@ export async function buildFieldsFromInstructions(
 
   const fields: ExtractionField[] = []
   const usedKeys = new Set<string>()
+  // Only accept a column the template really has
+  const columnNames = new Set(sheets.flatMap((s) => s.columns.map((c) => c.name)))
 
   for (const p of proposed) {
     const label = typeof p?.label === 'string' ? p.label.trim() : ''
@@ -69,6 +87,7 @@ export async function buildFieldsFromInstructions(
         : guessType(label),
       required: p.required === true,
       sortOrder: fields.length,
+      targetColumn: typeof p.column === 'string' && columnNames.has(p.column) ? p.column : null,
     })
   }
 

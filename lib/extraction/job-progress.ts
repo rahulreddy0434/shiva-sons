@@ -7,7 +7,7 @@ export const WIZARD_STEPS = [
   { slug: 'instructions', label: 'Instructions' },
   { slug: 'documents', label: 'Documents' },
   { slug: 'review', label: 'Review' },
-  { slug: 'export', label: 'Export' },
+  { slug: 'export', label: 'Approve & export' },
 ] as const
 
 export type StepSlug = (typeof WIZARD_STEPS)[number]['slug']
