@@ -9,57 +9,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
   }
 
-  const { jobId } = await request.json()
-  if (!jobId) {
-    return NextResponse.json({ error: 'Missing jobId' }, { status: 400 })
+  const { documentId } = await request.json()
+  if (!documentId) {
+    return NextResponse.json({ error: 'Missing documentId' }, { status: 400 })
   }
 
-  const { data: documents, error: docsError } = await supabase
+  const { data: doc, error: docError } = await supabase
     .from('uploaded_documents')
-    .select('id, storage_path, original_filename')
-    .eq('job_id', jobId)
-    .eq('status', 'uploaded')
-
-  if (docsError) {
-    return NextResponse.json({ error: docsError.message }, { status: 500 })
-  }
-  if (!documents || documents.length === 0) {
-    return NextResponse.json({ processed: 0, failed: 0 })
+    .select('id, storage_path')
+    .eq('id', documentId)
+    .single()
+  if (docError || !doc) {
+    return NextResponse.json({ error: docError?.message ?? 'Document not found' }, { status: 404 })
   }
 
-  let processed = 0
-  let failed = 0
+  try {
+    await supabase.from('uploaded_documents').update({ status: 'processing' }).eq('id', documentId)
 
-  for (const doc of documents) {
-    try {
-      await supabase.from('uploaded_documents').update({ status: 'processing' }).eq('id', doc.id)
-
-      const { data: fileBlob, error: downloadError } = await supabase.storage
-        .from('source-documents')
-        .download(doc.storage_path)
-      if (downloadError || !fileBlob) {
-        throw new Error(downloadError?.message ?? 'Could not download file from storage')
-      }
-
-      const buffer = Buffer.from(await fileBlob.arrayBuffer())
-      const result = await analyzeDocument(buffer)
-
-      for (const page of result.pages) {
-        await supabase.from('document_pages').insert({
-          document_id: doc.id,
-          user_id: user.id,
-          page_number: page.pageNumber,
-          ocr_raw: page,
-        })
-      }
-
-      await supabase.from('uploaded_documents').update({ status: 'ocr_complete' }).eq('id', doc.id)
-      processed++
-    } catch {
-      await supabase.from('uploaded_documents').update({ status: 'failed' }).eq('id', doc.id)
-      failed++
+    const { data: fileBlob, error: downloadError } = await supabase.storage
+      .from('source-documents')
+      .download(doc.storage_path)
+    if (downloadError || !fileBlob) {
+      throw new Error(downloadError?.message ?? 'Could not download file from storage')
     }
-  }
 
-  return NextResponse.json({ processed, failed })
+    const buffer = Buffer.from(await fileBlob.arrayBuffer())
+    const result = await analyzeDocument(buffer)
+
+    for (const page of result.pages) {
+      await supabase.from('document_pages').insert({
+        document_id: documentId,
+        user_id: user.id,
+        page_number: page.pageNumber,
+        ocr_raw: page,
+      })
+    }
+
+    await supabase.from('uploaded_documents').update({ status: 'ocr_complete' }).eq('id', documentId)
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    await supabase.from('uploaded_documents').update({ status: 'failed' }).eq('id', documentId)
+    return NextResponse.json({ error: err?.message ?? 'OCR failed' }, { status: 500 })
+  }
 }
