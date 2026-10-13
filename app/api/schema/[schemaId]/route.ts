@@ -25,6 +25,27 @@ export async function PATCH(
 
   // Replacing the full field list (add/remove/rename/reorder all go through here)
   if (Array.isArray(body.fields)) {
+    // The list is replaced wholesale, so carry each field's template column over by key
+    const { data: previous } = await supabase
+      .from('extraction_fields')
+      .select('field_key, target_column_id')
+      .eq('schema_id', schemaId)
+    const columnByKey = new Map((previous ?? []).map((f) => [f.field_key, f.target_column_id]))
+
+    // A column chosen in the editor must be one of this user's own template
+    // columns — row level security filters out anything else
+    const requestedIds = body.fields
+      .map((f: { targetColumnId?: unknown }) => f.targetColumnId)
+      .filter((id: unknown): id is string => typeof id === 'string')
+    const { data: ownColumns } = requestedIds.length
+      ? await supabase.from('workbook_columns').select('id').in('id', requestedIds)
+      : { data: [] }
+    const ownColumnIds = new Set((ownColumns ?? []).map((c) => c.id))
+    const resolveColumn = (f: { key: string; targetColumnId?: unknown }) => {
+      if (!('targetColumnId' in f)) return columnByKey.get(f.key) ?? null
+      return typeof f.targetColumnId === 'string' && ownColumnIds.has(f.targetColumnId) ? f.targetColumnId : null
+    }
+
     const { error: deleteError } = await supabase
       .from('extraction_fields')
       .delete()
@@ -41,6 +62,7 @@ export async function PATCH(
           data_type: f.dataType,
           required: f.required,
           sort_order: index,
+          target_column_id: resolveColumn(f),
         }))
       )
       if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })

@@ -8,15 +8,20 @@ export function SchemaEditor({
   schemaId,
   initialFields,
   initialApproved,
+  columns,
 }: {
   schemaId: string
   initialFields: ExtractionField[]
   initialApproved: boolean
+  /** Columns of the uploaded template, for choosing where each field is written. */
+  columns: { id: string; label: string }[]
 }) {
   const [fields, setFields] = useState<ExtractionField[]>(initialFields)
   const [approved, setApproved] = useState(initialApproved)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const unmappedCount = fields.filter((f) => !f.targetColumnId).length
 
   function updateField(index: number, patch: Partial<ExtractionField>) {
     setFields((prev) => prev.map((f, i) => (i === index ? { ...f, ...patch } : f)))
@@ -45,12 +50,18 @@ export function SchemaEditor({
 
   async function save(approve: boolean) {
     setSaving(true)
-    await fetch(`/api/schema/${schemaId}`, {
+    setError(null)
+    const res = await fetch(`/api/schema/${schemaId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields, approved: approve }),
     })
     setSaving(false)
+    if (!res.ok) {
+      const result = await res.json().catch(() => ({}))
+      setError(result.error ?? 'Your changes could not be saved. Please try again.')
+      return
+    }
     setApproved(approve)
     router.refresh()
   }
@@ -67,14 +78,20 @@ export function SchemaEditor({
     <div>
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-medium">Fields to extract</p>
-        <button type="button" onClick={startOver} className="text-xs text-[#B5522E] underline">
+        <button type="button" onClick={startOver} className="text-xs text-danger underline">
           Start over with new instructions
         </button>
       </div>
 
+      <p className="text-xs text-ink-muted mb-3">
+        Each field shows its name, its type, and the Excel column it will be written to.
+        {unmappedCount > 0 &&
+          ` ${unmappedCount} field${unmappedCount === 1 ? ' is' : 's are'} not linked to a column and will be left out of the Excel file.`}
+      </p>
+
       <div className="space-y-2">
         {fields.map((field, index) => (
-          <div key={index} className="flex items-center gap-2 border border-[#DADDD5] rounded-md px-3 py-2 bg-[#FCFCFB]">
+          <div key={index} className="flex items-center gap-2 border border-line rounded-md px-3 py-2 bg-surface">
             <input
               value={field.label}
               onChange={(e) => updateField(index, { label: e.target.value })}
@@ -83,7 +100,7 @@ export function SchemaEditor({
             <select
               value={field.dataType}
               onChange={(e) => updateField(index, { dataType: e.target.value as ExtractionField['dataType'] })}
-              className="text-xs border border-[#DADDD5] rounded px-1 py-1 bg-white"
+              className="text-xs border border-line rounded px-1 py-1 bg-white"
             >
               <option value="string">text</option>
               <option value="date">date</option>
@@ -91,7 +108,22 @@ export function SchemaEditor({
               <option value="duration">duration</option>
               <option value="number">number</option>
             </select>
-            <label className="flex items-center gap-1 text-xs text-[#5B6B78]">
+            <select
+              value={field.targetColumnId ?? ''}
+              onChange={(e) => updateField(index, { targetColumnId: e.target.value || null })}
+              aria-label={`Excel column for ${field.label}`}
+              className={`max-w-[11rem] text-xs border rounded px-1 py-1 bg-white ${
+                field.targetColumnId ? 'border-line' : 'border-brand text-brand-strong'
+              }`}
+            >
+              <option value="">⚠ not in Excel</option>
+              {columns.map((column) => (
+                <option key={column.id} value={column.id}>
+                  → {column.label}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1 text-xs text-ink-muted">
               <input
                 type="checkbox"
                 checked={field.required}
@@ -99,9 +131,9 @@ export function SchemaEditor({
               />
               required
             </label>
-            <button type="button" onClick={() => moveField(index, -1)} className="text-[#5B6B78] text-xs">↑</button>
-            <button type="button" onClick={() => moveField(index, 1)} className="text-[#5B6B78] text-xs">↓</button>
-            <button type="button" onClick={() => removeField(index)} className="text-[#B5522E] text-xs">✕</button>
+            <button type="button" onClick={() => moveField(index, -1)} className="text-ink-muted text-xs">↑</button>
+            <button type="button" onClick={() => moveField(index, 1)} className="text-ink-muted text-xs">↓</button>
+            <button type="button" onClick={() => removeField(index)} className="text-danger text-xs">✕</button>
           </div>
         ))}
       </div>
@@ -109,17 +141,19 @@ export function SchemaEditor({
       <button
         type="button"
         onClick={addField}
-        className="mt-3 text-xs border border-dashed border-[#DADDD5] rounded px-3 py-1.5 text-[#5B6B78]"
+        className="mt-3 text-xs border border-dashed border-line rounded px-3 py-1.5 text-ink-muted"
       >
         + Add field
       </button>
+
+      {error && <p className="text-sm text-danger mt-4">✕ {error}</p>}
 
       <div className="flex items-center gap-3 mt-6">
         <button
           type="button"
           disabled={saving}
           onClick={() => save(false)}
-          className="text-sm border border-[#DADDD5] rounded-md px-4 py-2 disabled:opacity-60"
+          className="text-sm border border-line rounded-md px-4 py-2 disabled:opacity-60"
         >
           Save changes
         </button>
@@ -127,7 +161,7 @@ export function SchemaEditor({
           type="button"
           disabled={saving}
           onClick={() => save(true)}
-          className="text-sm bg-[#A97C33] text-white rounded-md px-4 py-2 disabled:opacity-60"
+          className="text-sm bg-brand text-white rounded-md px-4 py-2 disabled:opacity-60"
         >
           {approved ? 'Approved ✓' : 'Approve schema'}
         </button>
