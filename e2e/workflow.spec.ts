@@ -195,6 +195,22 @@ test('create a job, extract, review side by side, approve, export and delete', a
   await expect(row).toContainText('Needs review')
   await shot(page, '08-dashboard')
 
+  // A new job can start from this one's template, instructions and fields
+  const copyName = `${jobName} (copy)`
+  await page.getByRole('link', { name: 'New extraction' }).first().click()
+  await page.getByLabel('Job name').fill(copyName)
+  await page.getByLabel('Start from a previous job').selectOption({ label: `${jobName} — Shiva Sons timecard template.xlsx` })
+  await page.getByRole('button', { name: 'Create job' }).click()
+  // Template is already there, so the job opens at Step 2 with the fields waiting to be confirmed
+  await expect(page).toHaveURL(/\/instructions/)
+  await expect(page.getByLabel('Excel column for Employee name')).toHaveValue(/.+/)
+  await expect(page.getByRole('button', { name: 'Approve schema' })).toBeVisible()
+  // Nothing from the first job's documents or results came along
+  await expect(page.getByText('Finish this step to continue.')).toBeVisible()
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await page.getByRole('button', { name: 'Delete job' }).click()
+  await expect(page).toHaveURL(/\/dashboard/)
+
   // Delete the job, with confirmation
   await row.getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByRole('alertdialog')).toContainText(jobName)

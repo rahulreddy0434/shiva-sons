@@ -64,8 +64,8 @@ export default async function InstructionsStepPage({
           initialApproved={schema.approved}
           columns={columnOptions}
           initialFields={(schema.extraction_fields ?? [])
-            .sort((a: any, b: any) => a.sort_order - b.sort_order)
-            .map((f: any) => ({
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((f) => ({
               id: f.id,
               key: f.field_key,
               label: f.label,

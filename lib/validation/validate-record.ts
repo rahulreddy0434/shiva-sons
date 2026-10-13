@@ -15,6 +15,10 @@ export interface FieldIssue {
     | 'math_mismatch'
     /** Another record has the same identifying values (see cross-checks.ts). */
     | 'duplicate'
+    /** End before start, or an implausibly long shift (see shift-checks.ts). */
+    | 'time_order'
+    /** A value outside what is plausible, such as a very long break (see shift-checks.ts). */
+    | 'out_of_range'
   severity: IssueSeverity
   message: string
 }

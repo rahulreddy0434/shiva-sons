@@ -48,7 +48,8 @@ own top-level folder. All application code uses the signed-in user's client,
 so the database enforces isolation even if a route forgets a filter.
 
 The service-role key bypasses all of this. It must never be imported into
-client code, and no application route currently uses it.
+client code. One route uses it: account deletion, after the caller has been
+identified with their normal session, and only on their own user id.
 
 ## Data model
 
@@ -161,20 +162,26 @@ limiter cannot take the product down.
 
 ## Data retention
 
-Current behaviour, also stated on the privacy page and in Settings:
+Current behaviour, also stated on the privacy page and in Settings
+(`lib/retention.ts`):
 
-- Jobs, uploaded documents, workbooks, OCR text, extracted values,
-  corrections, approvals and generated files are kept until the user deletes them.
+- The original uploaded documents and the text read from them are removed 30
+  days after their job was last changed. The document row stays, marked
+  `purged_at`, so the job still shows what was processed and extracted
+  records keep their link. The purge runs with the user's own session when
+  they open the dashboard; accounts that never return need a scheduled job
+  (see DEPLOYMENT.md).
+- Extracted values, corrections, approvals, Excel templates and generated
+  files are kept until the user deletes the job.
 - Deleting a job removes its files from all three storage buckets and then
   its database rows (which cascade). Removing a single document deletes its
   file, its OCR pages and every record extracted from it.
 - Links to view or download files are signed and short-lived (one hour for
   the review screen, ten minutes for downloads).
-- There is **no automatic expiry**. Whether source documents should be purged
-  after a set period is a product decision that has not been made.
-- Deleting an account is not offered in the app; removing the auth user in
-  Supabase cascades through every table, but storage objects must be removed
-  separately.
+- Deleting an account (Settings) removes every file in the user's folders
+  with their own session, then deletes the sign-in with the service-role
+  client (`lib/supabase/admin.ts`), which cascades through every table. That
+  is the only place the application uses the service-role key.
 
 ## Deployment notes
 

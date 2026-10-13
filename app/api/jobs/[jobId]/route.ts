@@ -1,30 +1,6 @@
 import { NextResponse } from 'next/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
-
-const JOB_BUCKETS = ['original-workbooks', 'source-documents', 'generated-exports']
-
-/** Every object path under `prefix`, walking into sub-folders. */
-async function listAllPaths(supabase: SupabaseClient, bucket: string, prefix: string): Promise<string[]> {
-  const paths: string[] = []
-  const pageSize = 1000
-
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase.storage.from(bucket).list(prefix, { limit: pageSize, offset })
-    if (error) throw new Error(`${bucket}: ${error.message}`)
-
-    for (const entry of data ?? []) {
-      const path = `${prefix}/${entry.name}`
-      // Folders come back without an id
-      if (entry.id === null) paths.push(...(await listAllPaths(supabase, bucket, path)))
-      else paths.push(path)
-    }
-
-    if (!data || data.length < pageSize) break
-  }
-
-  return paths
-}
+import { removeAllUnder } from '@/lib/storage/list-paths'
 
 export async function DELETE(
   request: Request,
@@ -49,19 +25,10 @@ export async function DELETE(
   // Storage objects are not removed by the database cascade, so clear them
   // first — if this fails the job row is still there and delete can be retried.
   try {
-    for (const bucket of JOB_BUCKETS) {
-      const paths = await listAllPaths(supabase, bucket, `${user.id}/${jobId}`)
-      if (paths.length === 0) continue
-
-      const { data: removed, error } = await supabase.storage.from(bucket).remove(paths)
-      if (error) throw new Error(`${bucket}: ${error.message}`)
-      // A missing storage delete policy fails silently: no error, nothing removed
-      if ((removed?.length ?? 0) < paths.length) {
-        throw new Error(`${bucket}: could not remove ${paths.length - (removed?.length ?? 0)} file(s)`)
-      }
-    }
-  } catch (err: any) {
-    return NextResponse.json({ error: `Could not delete the job's files — ${err?.message}` }, { status: 500 })
+    await removeAllUnder(supabase, `${user.id}/${jobId}`)
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'unknown error'
+    return NextResponse.json({ error: `Could not delete the job's files — ${reason}` }, { status: 500 })
   }
 
   // Child tables cascade from this row

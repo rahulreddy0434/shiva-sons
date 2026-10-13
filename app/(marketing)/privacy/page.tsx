@@ -40,10 +40,15 @@ export default function PrivacyPage() {
       </p>
 
       <h2 className="mt-8 text-lg font-medium">How long we keep it</h2>
-      <p className="mt-2 text-ink-muted">
-        Your jobs and files are kept until you delete them. Deleting a job removes its uploaded documents, its
-        workbooks, its generated files and all extracted data. There is no automatic expiry yet.
-      </p>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-ink-muted">
+        <li>
+          The original documents you upload, and the text read from them, are removed automatically 30 days after
+          the job they belong to was last changed. This happens the next time you open your dashboard after that point.
+        </li>
+        <li>Extracted values, your corrections, Excel templates and generated Excel files are kept until you delete the job.</li>
+        <li>Deleting a job removes everything in it immediately.</li>
+        <li>Deleting your account, from Settings, removes every job and file and closes the sign-in.</li>
+      </ul>
 
       <h2 className="mt-8 text-lg font-medium">Questions</h2>
       <p className="mt-2 text-ink-muted">Contact Shiva Sons Technologies using the details you were given when you signed up.</p>

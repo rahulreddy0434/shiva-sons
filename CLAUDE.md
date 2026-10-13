@@ -15,7 +15,8 @@ AI document-to-Excel app: timecards in, reviewed and approved Excel out.
 - Never mark data approved automatically, and never export unapproved data.
 - Never invent or silently correct an extracted value; flag it instead.
 - Every user-owned table gets a `user_id` column and an `own rows` RLS policy.
-- The service-role key is never used in client code.
+- The service-role key is never used in client code, and server-side only through
+  `lib/supabase/admin.ts` for operations a user session cannot do.
 
 ## Commands
 

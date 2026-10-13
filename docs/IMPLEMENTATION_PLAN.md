@@ -21,7 +21,7 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Named job creation; job statuses recomputed from what exists
 - ✅ White / orange / blue theme from shared tokens; a sans-serif font is now actually set
 - ✅ `.env.example`
-- ⬜ Clear the remaining `no-explicit-any` lint errors (older files)
+- ✅ Lint is clean
 
 ## Phase 2 — Excel template and extraction setup 🟡
 
@@ -31,8 +31,9 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Plain-English instructions → AI-proposed fields → edit → approve
 - ✅ Each field linked to an Excel column, visible and changeable in the field editor
 - ✅ Target worksheet chosen at approval
-- ⬜ Let the user correct the detected header row
-- ⬜ Saved, reusable templates and mappings across jobs
+- ✅ The user can correct the detected header row; field links are kept where the heading still exists
+- ✅ Start a new job from a previous job's template, instructions and field list
+- ⬜ A library of saved templates on the dashboard, independent of jobs
 - ⬜ Preview of the worksheet's existing rows
 
 ## Phase 3 — Documents and job tracking ✅
@@ -63,7 +64,9 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Record and job checks: day cells against their total, possible duplicates
 - ✅ Filters, mark reviewed, compact grid for day columns
 - ✅ Stacks vertically on a phone (checked at 390 px)
-- ⬜ Overnight shifts, break bounds, configurable rounding (for start/end-time style cards)
+- ✅ Start / end / break / total checks for clock-in style cards: overnight shifts,
+  implausibly long shifts, break bounds, total against the times (`lib/validation/shift-checks.ts`)
+- ⬜ Let the user set the rounding and limits per job (a policy object exists; there is no screen for it)
 - ⬜ Source highlighting on the document
 
 ## Phase 6 — Approval and Excel export ✅
@@ -77,11 +80,15 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 ## Phase 7 — Pilot readiness 🟡
 
 - ✅ Browser end-to-end test of the whole workflow
+- ✅ Automated proof that a second account cannot reach another account's pages, API
+  routes, database rows or stored files
 - ✅ Retention behaviour documented; third-party services listed
-- ⬜ Decide a retention period and build automatic expiry if wanted
-- ⬜ Account deletion
+- ✅ Retention: original documents and their read text removed 30 days after a job's
+  last change (needs the `document_retention` migration; runs when the user opens the dashboard)
+- ⬜ Scheduled retention for accounts that never sign in again
+- ✅ Account deletion from Settings (files, then the sign-in, which cascades)
 - ⬜ Accuracy measured on a set of real timecards
-- ⬜ Vercel deployment checklist (upload size, function time limits, env vars)
+- ✅ Deployment checklist written (`docs/DEPLOYMENT.md`); none of it carried out yet
 - ⬜ Legal review of the privacy and terms drafts
 
 ## Phase 8 — Later
@@ -106,6 +113,12 @@ panel on flagged fields, Better Auth if still wanted.
 | 2026-10-13 | Whole workflow in a real browser: sign in, name job, starter template, fields, upload, process, review side by side (desktop and 390 px), correct, reload, mark reviewed, approval blocked then allowed, export, download and reopen the file, approval cancelled by an edit, delete with confirmation | `npm run test:e2e` (Playwright, **mock mode** — proves the screens and flow, not extraction accuracy) | Pass |
 | 2026-10-13 | Public home, privacy and terms open; app pages redirect to sign-in | `npm run test:e2e` | Pass |
 | 2026-10-13 | Unit tests | `npm test` (97 tests) | Pass |
+| 2026-10-13 | Cross-account isolation: 6 pages, 13 API routes, 14 tables read / update / delete / insert, storage download / list / upload | `npm run test:e2e` with two test accounts | Pass |
+| 2026-10-13 | New job started from a previous job's setup | `npm run test:e2e` | Pass |
+| 2026-10-13 | Unit tests incl. shift checks | `npm test` (116 tests) | Pass |
+| 2026-10-13 | Account deletion: wrong email refused; right email removes sign-in, rows and files in all three buckets | Throwaway account, checked with the service role | Pass |
+| 2026-10-13 | Header-row correction: valid row re-reads columns, empty and invalid rows refused, restore | API calls as a test account | Pass (re-linking of fields not exercised) |
+| — | Retention purge against the database | Migration not applied yet | **Not yet verified** (date logic unit-tested) |
 | — | Cancel button during a batch | Needs a manual check | **Not yet verified** |
 | — | Real template + real card through to an Excel file opened in Excel | Needs Gemini quota | **Not yet verified** |
 | — | Rate limiting against the real `api_usage` table | Migration not applied yet | **Not yet verified** |

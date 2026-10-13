@@ -5,6 +5,19 @@ import { ProcessButton } from '@/components/extraction/process-button'
 import { ExtractButton } from '@/components/extraction/extract-button'
 import { RemoveDocumentButton } from '@/components/upload/remove-document-button'
 import { formatBytes } from '@/lib/documents/validate-upload'
+import { purgedDocumentIds, RETENTION_DAYS } from '@/lib/retention'
+
+interface PageRow {
+  id: string
+  document_id: string
+  page_number: number
+  ocr_raw: { text?: string } | null
+  extraction_records: {
+    id: string
+    status: string
+    extracted_fields: { field_key: string; value: string | null; confidence: number | null; status: string }[]
+  }[]
+}
 
 const STATUS_TEXT: Record<string, string> = {
   uploaded: 'Uploaded — not read yet',
@@ -31,7 +44,7 @@ export default async function DocumentsStepPage({
     .eq('job_id', jobId)
     .order('created_at', { ascending: false })
 
-  const pagesByDocument = new Map<string, any[]>()
+  const pagesByDocument = new Map<string, PageRow[]>()
   if (documents && documents.length > 0) {
     const { data: pages } = await supabase
       .from('document_pages')
@@ -39,19 +52,25 @@ export default async function DocumentsStepPage({
       .in('document_id', documents.map((d) => d.id))
       .order('page_number', { ascending: true })
 
-    for (const p of pages ?? []) {
+    for (const p of (pages ?? []) as PageRow[]) {
       const list = pagesByDocument.get(p.document_id) ?? []
       list.push(p)
       pagesByDocument.set(p.document_id, list)
     }
   }
 
+  // Originals removed under the retention policy can no longer be read or re-read
+  const purged = await purgedDocumentIds(supabase, jobId)
+  const live = documents?.filter((d) => !purged.has(d.id)) ?? []
+
   // A failed document goes back into whichever step it failed at, so it can be retried
   const hasPages = (id: string) => (pagesByDocument.get(id)?.length ?? 0) > 0
-  const pendingOcrIds =
-    documents?.filter((d) => d.status === 'uploaded' || (d.status === 'failed' && !hasPages(d.id))).map((d) => d.id) ?? []
-  const pendingExtractIds =
-    documents?.filter((d) => d.status === 'ocr_complete' || (d.status === 'failed' && hasPages(d.id))).map((d) => d.id) ?? []
+  const pendingOcrIds = live
+    .filter((d) => d.status === 'uploaded' || (d.status === 'failed' && !hasPages(d.id)))
+    .map((d) => d.id)
+  const pendingExtractIds = live
+    .filter((d) => d.status === 'ocr_complete' || (d.status === 'failed' && hasPages(d.id)))
+    .map((d) => d.id)
 
   return (
     <div className="max-w-4xl">
@@ -89,7 +108,14 @@ export default async function DocumentsStepPage({
                 </span>
               </div>
 
-              {doc.status === 'failed' && (
+              {purged.has(doc.id) && (
+                <p className="text-xs text-ink-muted">
+                  The original file and its read text were removed {RETENTION_DAYS} days after the job was last
+                  changed. The extracted data is still in Review.
+                </p>
+              )}
+
+              {doc.status === 'failed' && !purged.has(doc.id) && (
                 <p className="text-xs text-danger">
                   ✕ {doc.error_message ?? 'This document could not be processed.'} Use the button below to try again.
                 </p>
@@ -102,7 +128,7 @@ export default async function DocumentsStepPage({
                       Page {p.page_number} — view extracted text
                     </summary>
                     <div className="mt-2 text-xs bg-surface border border-line rounded p-2 whitespace-pre-wrap">
-                      {p.ocr_raw.text}
+                      {p.ocr_raw?.text ?? 'Removed under the retention policy.'}
                     </div>
                   </details>
 
@@ -112,9 +138,9 @@ export default async function DocumentsStepPage({
                         Page {p.page_number} — view extracted fields
                       </summary>
                       <div className="mt-2 space-y-2">
-                        {p.extraction_records.map((record: any) => (
+                        {p.extraction_records.map((record) => (
                           <div key={record.id} className="text-xs bg-surface border border-line rounded p-2">
-                            {record.extracted_fields.map((f: any) => (
+                            {record.extracted_fields.map((f) => (
                               <div key={f.field_key} className="flex justify-between py-0.5">
                                 <span className="text-ink-muted">{f.field_key}</span>
                                 <span>

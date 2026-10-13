@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { requireStep } from '@/lib/extraction/job-progress'
 import { ReviewWorkspace, type ReviewDocument, type ReviewRecord } from '@/components/review/review-workspace'
+import { purgedDocumentIds } from '@/lib/retention'
 import type { ExtractionField } from '@/types/extraction'
 
 // How long the links to the original files stay valid after the page loads
@@ -46,7 +47,8 @@ export default async function ReviewStepPage({
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder)
 
-  const paths = (documentRows ?? []).map((d) => d.storage_path)
+  const purged = await purgedDocumentIds(supabase, jobId)
+  const paths = (documentRows ?? []).filter((d) => !purged.has(d.id)).map((d) => d.storage_path)
   const { data: signed } = paths.length
     ? await supabase.storage.from('source-documents').createSignedUrls(paths, SIGNED_URL_SECONDS)
     : { data: [] }
@@ -57,7 +59,8 @@ export default async function ReviewStepPage({
     name: d.original_filename,
     fileType: d.file_type,
     status: d.status,
-    url: urlByPath.get(d.storage_path) ?? null,
+    url: purged.has(d.id) ? null : (urlByPath.get(d.storage_path) ?? null),
+    purged: purged.has(d.id),
     pages: [...d.document_pages]
       .sort((a, b) => a.page_number - b.page_number)
       .map((p) => ({ id: p.id, pageNumber: p.page_number, text: (p.text as string | null) ?? '' })),
