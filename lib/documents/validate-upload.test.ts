@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkDocument, formatBytes, MAX_DOCUMENT_BYTES, sniffDocumentType } from './validate-upload'
+import { checkDocument, checkSelection, formatBytes, MAX_DOCUMENT_BYTES, MAX_UPLOAD_TOTAL_BYTES, sniffDocumentType } from './validate-upload'
 
 const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
 const jpg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46])
@@ -39,7 +39,7 @@ describe('checkDocument', () => {
     const big = new Uint8Array(MAX_DOCUMENT_BYTES + 1)
     big.set(pdf)
     const result = checkDocument('big.pdf', big)
-    expect('error' in result && result.error).toContain('the limit is 20.0 MB per file')
+    expect('error' in result && result.error).toContain('the limit is 20 MB per file')
   })
 
   it('accepts a file exactly at the limit', () => {
@@ -53,6 +53,36 @@ describe('formatBytes', () => {
   it('uses the unit a person would expect', () => {
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(240_000)).toBe('234 KB')
-    expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB')
+    expect(formatBytes(5 * 1024 * 1024)).toBe('5 MB')
+    expect(formatBytes(1.5 * 1024 * 1024)).toBe('1.5 MB')
+  })
+})
+
+describe('checkSelection', () => {
+  const MB = 1024 * 1024
+  const file = (name: string, size: number) => ({ name, size })
+
+  it('accepts timecards within both limits', () => {
+    const { accepted, rejected } = checkSelection([file('a.pdf', 5 * MB), file('b.JPG', MB), file('c.png', MB)])
+    expect(accepted.map((f) => f.name)).toEqual(['a.pdf', 'b.JPG', 'c.png'])
+    expect(rejected).toEqual([])
+  })
+
+  it('refuses other file types, empty files and files over the per-file limit, saying why', () => {
+    const { rejected } = checkSelection([file('notes.docx', MB), file('empty.pdf', 0), file('huge.pdf', 25 * MB)])
+    expect(rejected.map((r) => [r.file.name, r.error])).toEqual([
+      ['notes.docx', 'Not a PDF, JPG or PNG file.'],
+      ['empty.pdf', 'The file is empty.'],
+      ['huge.pdf', '25 MB — larger than the 20 MB limit per file.'],
+    ])
+  })
+
+  it('stops at the total limit and refuses the files beyond it', () => {
+    const files = Array.from({ length: 7 }, (_, i) => file(`card-${i + 1}.pdf`, 15 * MB))
+    const { accepted, rejected } = checkSelection(files)
+    expect(accepted).toHaveLength(6)
+    expect(rejected.map((r) => r.file.name)).toEqual(['card-7.pdf'])
+    expect(rejected[0].error).toContain('past 100 MB in total')
+    expect(MAX_UPLOAD_TOTAL_BYTES).toBe(100 * MB)
   })
 })

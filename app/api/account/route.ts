@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { removeAllUnder } from '@/lib/storage/list-paths'
 
+// Reads back or removes files in storage, which can take longer than the default
+export const maxDuration = 60
+
 /**
  * Permanently deletes the signed-in user's account and everything in it.
  * Body: { confirmEmail } — must match the account's email.

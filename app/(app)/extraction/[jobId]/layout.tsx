@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation'
 import { getJobProgress, WIZARD_STEPS } from '@/lib/extraction/job-progress'
 import { StepIndicator, StepNav } from '@/components/extraction/wizard-steps'
 import { DeleteJobButton } from '@/components/extraction/delete-job-button'
-import { daysUntilRemoval, removalDate, RETENTION_DAYS } from '@/lib/retention'
+import { createClient } from '@/lib/supabase/server'
+import { retentionNotice, RETENTION_DAYS } from '@/lib/retention'
 
 export default async function ExtractionJobLayout({
   children,
@@ -18,7 +19,13 @@ export default async function ExtractionJobLayout({
 
   const { job, unlocked, completed } = progress
   // Step 3 unlocked means documents may exist; before that there is nothing to remove
-  const daysLeft = unlocked[2] ? daysUntilRemoval(job.updated_at) : null
+  let notice = null
+  if (unlocked[2]) {
+    const supabase = await createClient()
+    const { data: documents, error } = await supabase.from('uploaded_documents').select('purged_at').eq('job_id', jobId)
+    // An error most likely means the retention migration is not applied yet
+    if (!error) notice = retentionNotice(documents ?? [], job.updated_at)
+  }
 
   return (
     <div>
@@ -32,12 +39,13 @@ export default async function ExtractionJobLayout({
       </div>
       <hr className="border-line my-6" />
 
-      {daysLeft !== null && daysLeft <= 7 && (
+      {notice && (
         <p className="mb-5 max-w-4xl rounded-md border border-brand bg-brand-soft px-4 py-2 text-sm text-brand-strong">
-          ⚠{' '}
-          {daysLeft === 0
-            ? `The original documents for this job are due to be removed: it has not been changed for ${RETENTION_DAYS} days.`
-            : `The original documents for this job will be removed on ${removalDate(job.updated_at).toLocaleDateString()} (${RETENTION_DAYS} days after its last change).`}{' '}
+          {notice.kind === 'removed'
+            ? `The original documents for this job were removed after ${RETENTION_DAYS} days without changes.`
+            : notice.kind === 'due'
+              ? `⚠ The original documents for this job are due to be removed: it has not been changed for ${RETENTION_DAYS} days.`
+              : `⚠ The original documents for this job will be removed on ${notice.on.toLocaleDateString()} (${RETENTION_DAYS} days after its last change).`}{' '}
           Your extracted data and Excel files are kept.
         </p>
       )}

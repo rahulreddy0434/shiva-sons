@@ -3,15 +3,26 @@ import { requireStep } from '@/lib/extraction/job-progress'
 import { DocumentDropzone } from '@/components/upload/document-dropzone'
 import { ProcessButton } from '@/components/extraction/process-button'
 import { ExtractButton } from '@/components/extraction/extract-button'
+import { pageStatuses, type PageState } from '@/lib/extraction/page-status'
 import { RemoveDocumentButton } from '@/components/upload/remove-document-button'
 import { formatBytes } from '@/lib/documents/validate-upload'
 import { purgedDocumentIds, RETENTION_DAYS } from '@/lib/retention'
+
+const PAGE_CHIP: Record<PageState, string> = {
+  records: 'border-success text-success',
+  continues: 'border-line text-ink-muted',
+  read: 'border-brand-blue text-brand-blue',
+  not_read: 'border-line text-ink-faint',
+  removed: 'border-line text-ink-faint',
+  empty: 'border-brand bg-brand-soft text-brand-strong',
+}
 
 interface PageRow {
   id: string
   document_id: string
   page_number: number
-  ocr_raw: { text?: string } | null
+  // Only the read text: the stored word positions are for the review screen
+  text: string | null
   extraction_records: {
     id: string
     status: string
@@ -48,7 +59,7 @@ export default async function DocumentsStepPage({
   if (documents && documents.length > 0) {
     const { data: pages } = await supabase
       .from('document_pages')
-      .select('id, document_id, page_number, ocr_raw, extraction_records(id, status, extracted_fields(field_key, value, confidence, status))')
+      .select('id, document_id, page_number, text:ocr_raw->>text, extraction_records(id, status, extracted_fields(field_key, value, confidence, status))')
       .in('document_id', documents.map((d) => d.id))
       .order('page_number', { ascending: true })
 
@@ -68,9 +79,9 @@ export default async function DocumentsStepPage({
   const pendingOcrIds = live
     .filter((d) => d.status === 'uploaded' || (d.status === 'failed' && !hasPages(d.id)))
     .map((d) => d.id)
-  const pendingExtractIds = live
+  const pendingExtract = live
     .filter((d) => d.status === 'ocr_complete' || (d.status === 'failed' && hasPages(d.id)))
-    .map((d) => d.id)
+    .map((d) => ({ id: d.id, pageCount: pagesByDocument.get(d.id)?.length ?? 1 }))
 
   return (
     <div className="max-w-4xl">
@@ -121,6 +132,25 @@ export default async function DocumentsStepPage({
                 </p>
               )}
 
+              <ul aria-label={`Pages of ${doc.original_filename}`} className="mt-1 flex flex-wrap gap-1.5">
+                {pageStatuses(
+                  doc.page_count,
+                  (pagesByDocument.get(doc.id) ?? []).map((p) => ({
+                    pageNumber: p.page_number,
+                    hasText: p.text !== null,
+                    recordCount: p.extraction_records?.length ?? 0,
+                  })),
+                  { extracted: doc.status === 'extraction_complete', purged: purged.has(doc.id) }
+                ).map((page) => (
+                  <li
+                    key={page.pageNumber}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] ${PAGE_CHIP[page.state]}`}
+                  >
+                    {page.attention && '⚠ '}Page {page.pageNumber} · {page.label}
+                  </li>
+                ))}
+              </ul>
+
               {pagesByDocument.get(doc.id)?.map((p) => (
                 <div key={p.id}>
                   <details className="mt-1">
@@ -128,7 +158,7 @@ export default async function DocumentsStepPage({
                       Page {p.page_number} — view extracted text
                     </summary>
                     <div className="mt-2 text-xs bg-surface border border-line rounded p-2 whitespace-pre-wrap">
-                      {p.ocr_raw?.text ?? 'Removed under the retention policy.'}
+                      {p.text ?? 'Removed under the retention policy.'}
                     </div>
                   </details>
 
@@ -162,7 +192,7 @@ export default async function DocumentsStepPage({
           ))}
 
           <ProcessButton pendingDocumentIds={pendingOcrIds} />
-          <ExtractButton jobId={jobId} pendingDocumentIds={pendingExtractIds} />
+          <ExtractButton jobId={jobId} pendingDocuments={pendingExtract} />
         </div>
       )}
     </div>

@@ -118,3 +118,39 @@ export async function parseWorkbook(buffer: Buffer): Promise<ParsedWorkbook> {
 
   return { sheets }
 }
+
+export interface SheetPreview {
+  /** The first few rows under the headings, as shown text, one entry per heading column. */
+  rows: string[][]
+  /** How many rows under the headings hold typed-in data (rows of formulas only are not counted). */
+  filledRows: number
+}
+
+/**
+ * The rows already under a worksheet's headings, so the user can see what
+ * the template holds before records are added below it.
+ */
+export async function readSheetPreview(
+  buffer: Buffer,
+  sheetName: string,
+  headerRowNumber: number,
+  columnIndexes: number[],
+  limit = 3
+): Promise<SheetPreview | null> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+  const worksheet = workbook.getWorksheet(sheetName)
+  if (!worksheet) return null
+
+  const rows: string[][] = []
+  let filledRows = 0
+  for (let r = headerRowNumber + 1; r <= worksheet.rowCount; r++) {
+    const row = worksheet.getRow(r)
+    const cells = columnIndexes.map((index) => row.getCell(index + 1))
+    const typed = cells.some((cell) => cell.type !== ExcelJS.ValueType.Formula && cellText(cell) !== '')
+    if (!typed) continue
+    filledRows++
+    if (rows.length < limit) rows.push(cells.map(cellText))
+  }
+  return { rows, filledRows }
+}

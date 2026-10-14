@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExtractionField } from '@/types/extraction'
 import { findSeriesTotals, validateRecords } from './cross-checks'
+import { DEFAULT_CHECK_POLICY } from './check-policy'
 
 const f = (key: string, label: string, dataType: ExtractionField['dataType'], required = false): ExtractionField => ({
   key, label, dataType, required, sortOrder: 0,
@@ -27,6 +28,16 @@ describe('findSeriesTotals', () => {
     expect(pairs).toHaveLength(1)
     expect(pairs[0].total.key).toBe('total')
     expect(pairs[0].cells).toHaveLength(7)
+  })
+
+  it('also pairs a total the AI typed as text', () => {
+    const textTotal = [...days, f('total', 'Total', 'string')]
+    expect(findSeriesTotals(textTotal)).toHaveLength(1)
+    const issues = validateRecords(textTotal, [{ id: 'r1', values: Object.fromEntries([
+      ...week.map((h, i) => [`day_${i + 1}`, { value: h, status: 'extracted', confidence: 0.95 }]),
+      ['total', { value: '70', status: 'extracted', confidence: 0.95 }],
+    ]) }]).get('r1')!
+    expect(issues).toMatchObject([{ fieldKey: 'total', type: 'math_mismatch' }])
   })
 
   it('finds nothing when the next column is not a total', () => {
@@ -106,5 +117,25 @@ describe('validateRecords — combining', () => {
   it('reports a mismatch and a duplicate together when they are on different fields', () => {
     const result = validateRecords(fields, [record('r1', week, '70'), record('r2', week, '60')])
     expect(result.get('r1')!.map((i) => i.type).sort()).toEqual(['duplicate', 'math_mismatch'])
+  })
+})
+
+describe('validateRecords — job settings', () => {
+  it('flags a day with more hours than the job allows in one day', () => {
+    const issues = validateRecords(fields, [record('r1', ['10', '10', '100', '0', '10', '10', '10'], '150')]).get('r1')!
+    expect(issues).toContainEqual(
+      expect.objectContaining({ fieldKey: 'day_3', type: 'out_of_range', severity: 'warning' })
+    )
+    expect(issues.find((i) => i.fieldKey === 'day_3')!.message).toBe(
+      '100 hours is more than the 16 allowed in one day. Check it against the document.'
+    )
+  })
+
+  it('uses the job’s own limit and tolerance', () => {
+    const policy = { ...DEFAULT_CHECK_POLICY, maxHoursPerDay: 9, toleranceHours: 0.5 }
+    const issues = validateRecords(fields, [record('r1', week, '60.25')], policy).get('r1')!
+    // Every 10-hour day is over 9; the 0.25 difference in the total is within tolerance
+    expect(issues.filter((i) => i.type === 'out_of_range')).toHaveLength(6)
+    expect(issues.some((i) => i.type === 'math_mismatch')).toBe(false)
   })
 })

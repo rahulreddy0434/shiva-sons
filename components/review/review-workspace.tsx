@@ -10,14 +10,19 @@ import {
   type ReviewState,
 } from '@/lib/validation/validate-record'
 import { validateRecords } from '@/lib/validation/cross-checks'
+import type { CheckPolicy } from '@/lib/validation/check-policy'
 import { groupFields } from '@/lib/review/group-fields'
-import { DocumentViewer } from './document-viewer'
+import { locateSource, pagesForRecord, type LocatorPage, type SourceLocation } from '@/lib/review/source-locator'
+import { DocumentViewer, type Highlight } from './document-viewer'
 
 export interface ReviewPage {
   id: string
   pageNumber: number
   /** What OCR read on this page, shown on request so a value can be traced to its source. */
   text: string
+  /** Positions of words and table cells; empty for pages read before positions were kept. */
+  words: LocatorPage['words']
+  tables: LocatorPage['tables']
 }
 
 export interface ReviewDocument {
@@ -60,10 +65,13 @@ export function ReviewWorkspace({
   fields,
   documents,
   records,
+  policy,
 }: {
   fields: ExtractionField[]
   documents: ReviewDocument[]
   records: ReviewRecord[]
+  /** The job's check settings — the same ones approval uses. */
+  policy: CheckPolicy
 }) {
   const router = useRouter()
   const [documentId, setDocumentId] = useState(documents[0]?.id ?? '')
@@ -74,6 +82,7 @@ export function ReviewWorkspace({
   const [busyRecordId, setBusyRecordId] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [adding, setAdding] = useState(false)
+  const [highlight, setHighlight] = useState<Highlight | null>(null)
 
   const pageLookup = useMemo(() => {
     const map = new Map<string, { documentId: string; pageNumber: number }>()
@@ -100,7 +109,7 @@ export function ReviewWorkspace({
     })
 
     // Checked together: a total against its cells, and records against each other
-    const issuesByRecord = validateRecords(fields, shownByRecord)
+    const issuesByRecord = validateRecords(fields, shownByRecord, policy)
 
     return records.map((record) => {
       const draft = drafts[record.id] ?? {}
@@ -115,7 +124,18 @@ export function ReviewWorkspace({
         pageNumber: location?.pageNumber ?? 1,
       }
     })
-  }, [records, drafts, fields, pageLookup])
+  }, [records, drafts, fields, pageLookup, policy])
+
+  // Field key → the labels of the run it belongs to (day columns), for finding its table row
+  const seriesLabels = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const group of groupFields(fields)) {
+      if (group.kind !== 'series') continue
+      const labels = group.fields.map((f) => f.label)
+      for (const f of group.fields) map.set(f.key, labels)
+    }
+    return map
+  }, [fields])
 
   const counts: Record<Filter, number> = {
     all: evaluated.length,
@@ -133,6 +153,39 @@ export function ReviewWorkspace({
   function goTo(nextDocumentId: string, nextPage: number) {
     setDocumentId(nextDocumentId)
     setPageNumber(nextPage)
+  }
+
+  /** Outlines on the original where a field's value was read, and turns to that page. */
+  function locate(record: ReviewRecord, field: ExtractionField, shownValue: string) {
+    const start = pageLookup.get(record.pageId)
+    const doc = documents.find((d) => d.id === start?.documentId)
+    if (!start || !doc) return
+
+    const otherStarts = records
+      .filter((r) => r.id !== record.id)
+      .map((r) => pageLookup.get(r.pageId))
+      .filter((l) => l?.documentId === doc.id)
+      .map((l) => l!.pageNumber)
+    const numbers = pagesForRecord(doc.pages.map((p) => p.pageNumber), start.pageNumber, otherStarts)
+    const pages = doc.pages.filter((p) => numbers.includes(p.pageNumber)).sort((a, b) => a.pageNumber - b.pageNumber)
+
+    // The value as shown first; failing that, what the AI originally read
+    const original = record.values[field.key]?.original ?? null
+    let location: SourceLocation | null = null
+    for (const value of [shownValue, original]) {
+      if (!value) continue
+      location = locateSource({ label: field.label, value, series: seriesLabels.get(field.key), pages })
+      if (location) break
+    }
+
+    setHighlight({
+      documentId: doc.id,
+      label: field.label,
+      location,
+      reason: location ? undefined : pages.some((p) => p.words.length > 0) ? 'not_found' : 'no_positions',
+    })
+    const stayOnPage = documentId === doc.id && numbers.includes(pageNumber)
+    goTo(doc.id, location?.pageNumber ?? (stayOnPage ? pageNumber : start.pageNumber))
   }
 
   function goToNextAttention() {
@@ -214,6 +267,7 @@ export function ReviewWorkspace({
         documents={documents}
         documentId={documentId}
         pageNumber={pageNumber}
+        highlight={highlight}
         attentionByDocument={Object.fromEntries(
           documents.map((d) => [
             d.id,
@@ -271,6 +325,7 @@ export function ReviewWorkspace({
               error={errors[record.id]}
               onShowPage={() => goTo(documentId, recordPage)}
               onChange={(key, value) => setDraft(record.id, key, value)}
+              onLocate={(field, value) => locate(record, field, value)}
               onSave={() => save(record, false)}
               onMarkReviewed={() => save(record, true)}
               onUnmarkReviewed={() =>
@@ -327,11 +382,13 @@ function SeriesGrid({
   fields,
   state,
   onChange,
+  onLocate,
 }: {
   recordId: string
   fields: ExtractionField[]
   state: (field: ExtractionField) => FieldState
   onChange: (key: string, value: string) => void
+  onLocate: (field: ExtractionField, value: string) => void
 }) {
   const cells = fields.map((field) => ({ field, ...state(field) }))
   const problems = cells.filter((c) => c.issue)
@@ -376,6 +433,7 @@ function SeriesGrid({
                 id={inputId}
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
+                onFocus={() => onLocate(field, value)}
                 inputMode={field.dataType === 'number' ? 'decimal' : undefined}
                 aria-invalid={issue?.severity === 'blocking'}
                 aria-label={`Column ${field.label}${markLabel ? ` — ${markLabel}` : ''}`}
@@ -425,6 +483,7 @@ function RecordCard({
   error,
   onShowPage,
   onChange,
+  onLocate,
   onSave,
   onMarkReviewed,
   onUnmarkReviewed,
@@ -442,6 +501,7 @@ function RecordCard({
   error?: string
   onShowPage: () => void
   onChange: (key: string, value: string) => void
+  onLocate: (field: ExtractionField, value: string) => void
   onSave: () => void
   onMarkReviewed: () => void
   onUnmarkReviewed: () => void
@@ -486,6 +546,7 @@ function RecordCard({
                 fields={group.fields}
                 state={fieldState}
                 onChange={onChange}
+                onLocate={onLocate}
               />
             )
           }
@@ -505,6 +566,7 @@ function RecordCard({
                   id={inputId}
                   value={value}
                   onChange={(e) => onChange(field.key, e.target.value)}
+                  onFocus={() => onLocate(field, value)}
                   placeholder={INPUT_TYPE_HINT[field.dataType]}
                   aria-invalid={issue?.severity === 'blocking'}
                   aria-describedby={issue ? `${inputId}-issue` : undefined}

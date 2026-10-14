@@ -4,8 +4,8 @@ import { storeWorkbook } from '@/lib/excel/store-workbook'
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
 /**
- * Gives a new job the same Excel template, instructions and field list as an
- * earlier job, so a recurring job (this month's timecards) does not have to
+ * Gives a new job the same Excel template, instructions, field list and check
+ * settings as an earlier job, so a recurring job (this month's timecards) does not have to
  * be set up again. Documents and extracted data are never copied.
  *
  * The copied field list is left unapproved: the user confirms it for the new
@@ -37,6 +37,16 @@ export async function copyJobSetup(
     filename: sourceWorkbook.original_filename,
     buffer: Buffer.from(await blob.arrayBuffer()),
   })
+
+  // Check settings come along when set; a database without the column skips this
+  const { data: sourceJob, error: policyError } = await supabase
+    .from('extraction_jobs')
+    .select('check_policy')
+    .eq('id', sourceJobId)
+    .maybeSingle()
+  if (!policyError && sourceJob?.check_policy) {
+    await supabase.from('extraction_jobs').update({ check_policy: sourceJob.check_policy }).eq('id', targetJobId)
+  }
 
   const { data: instructions } = await supabase
     .from('extraction_instructions')

@@ -3,6 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { analyzeDocument } from '@/lib/azure/document-intelligence'
 
+// Reading a document or waiting on a busy AI model can take minutes; 300 s is
+// the most Vercel's Hobby plan allows (see docs/DEPLOYMENT.md)
+export const maxDuration = 300
+
+/** A failure whose message is fit to show the user as it is. */
+class ReadError extends Error {}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -41,6 +48,12 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await fileBlob.arrayBuffer())
     const result = await analyzeDocument(buffer)
+    // Never keep a partial read as if it were the whole document
+    if (result.expectedPages && result.pages.length < result.expectedPages) {
+      throw new ReadError(
+        `Only ${result.pages.length} of ${result.expectedPages} pages could be read. Try again; if it keeps happening, split the file into smaller ones.`
+      )
+    }
 
     // Upsert on (document, page) so retrying OCR replaces pages instead of duplicating them
     const { error: pagesError } = await supabase.from('document_pages').upsert(
@@ -60,7 +73,10 @@ export async function POST(request: Request) {
       .eq('id', documentId)
     return NextResponse.json({ ok: true })
   } catch (err) {
-    const message = 'This document could not be read. Check that the file opens normally, then try again.'
+    const message =
+      err instanceof ReadError
+        ? err.message
+        : 'This document could not be read. Check that the file opens normally, then try again.'
     // Log the cause for the developer, never the document's contents
     console.error(`OCR failed for document ${documentId}:`, err instanceof Error ? err.message.slice(0, 300) : err)
     await supabase

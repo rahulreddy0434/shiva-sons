@@ -109,11 +109,10 @@ test('a second account cannot see, change or delete the first account’s job', 
     ['re-run extraction', api.post('/api/extraction/extract', { data: { jobId, documentId } })],
     ['generate fields', api.post('/api/schema/generate', { data: { jobId, instructions: 'x', useColumns: true } })],
     ['starter template', api.post('/api/workbooks/starter', { data: { jobId } })],
+    ['get an upload link', api.post('/api/documents/upload-url', { data: { jobId, fileName: 'x.png', size: 8 } })],
     [
-      'upload document',
-      api.post('/api/documents/upload', {
-        multipart: { jobId, file: { name: 'x.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) } },
-      }),
+      'register a document',
+      api.post('/api/documents/register', { data: { jobId, path: ownDocs![0].storage_path, fileName: 'x.png' } }),
     ],
   ]
   for (const [what, attempt] of attempts) {

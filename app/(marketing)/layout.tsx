@@ -1,6 +1,11 @@
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
 
-export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
+  // A signed-in visitor gets a way back into the app instead of Log in / Sign up
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
   return (
     <div className="flex min-h-screen flex-col bg-white text-ink">
       <header className="border-b border-line">
@@ -11,10 +16,18 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <Link href="/#how-it-works" className="text-ink-muted hover:text-ink">How it works</Link>
             <Link href="/#features" className="text-ink-muted hover:text-ink">Features</Link>
-            <Link href="/sign-in" className="text-brand-blue hover:underline">Log in</Link>
-            <Link href="/sign-up" className="bg-brand text-white font-medium rounded-md px-4 py-2">
-              Sign up
-            </Link>
+            {user ? (
+              <Link href="/dashboard" className="bg-brand text-white font-medium rounded-md px-4 py-2">
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/sign-in" className="text-brand-blue hover:underline">Log in</Link>
+                <Link href="/sign-up" className="bg-brand text-white font-medium rounded-md px-4 py-2">
+                  Sign up
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>

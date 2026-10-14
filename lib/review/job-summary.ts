@@ -2,6 +2,7 @@ import type { ExtractionField } from '@/types/extraction'
 import { reviewState, type FieldValue } from '@/lib/validation/validate-record'
 import { validateRecords } from '@/lib/validation/cross-checks'
 import type { ExportColumn } from '@/lib/excel/fill-template'
+import { DEFAULT_CHECK_POLICY, type CheckPolicy } from '@/lib/validation/check-policy'
 
 export interface SummaryRecord {
   id: string
@@ -26,7 +27,11 @@ export interface JobSummary {
   reviewedCount: number
 }
 
-export function summarizeRecords(fields: ExtractionField[], records: SummaryRecord[]): JobSummary {
+export function summarizeRecords(
+  fields: ExtractionField[],
+  records: SummaryRecord[],
+  policy: CheckPolicy = DEFAULT_CHECK_POLICY
+): JobSummary {
   const summary: JobSummary = {
     recordCount: records.length,
     correctedCount: 0,
@@ -36,7 +41,7 @@ export function summarizeRecords(fields: ExtractionField[], records: SummaryReco
     reviewedCount: 0,
   }
 
-  const issuesByRecord = validateRecords(fields, records)
+  const issuesByRecord = validateRecords(fields, records, policy)
 
   for (const record of records) {
     if (Object.values(record.values).some((v) => v?.status === 'user_corrected')) summary.correctedCount++

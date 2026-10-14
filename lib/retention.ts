@@ -1,6 +1,10 @@
-import type { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-type Supabase = Awaited<ReturnType<typeof createClient>>
+// The user's own client, or the service-role client for the scheduled run
+type Supabase = SupabaseClient
+
+/** Most documents one run removes; a daily run catches up on the rest. */
+const PURGE_BATCH = 500
 
 /**
  * Retention policy: the original uploaded documents — the timecards, which
@@ -43,28 +47,22 @@ export async function purgedDocumentIds(supabase: Supabase, jobId: string): Prom
 }
 
 /**
- * Removes the originals of the signed-in user's own expired jobs. It runs
- * with that user's session, so row level security confines it to their data.
- * Returns how many documents were purged.
+ * Removes the originals of expired jobs and returns how many were removed.
  *
- * This runs when the user opens the dashboard. An account that never signs
- * in again is not reached — that needs a scheduled job with elevated access,
- * which is a deployment task (see docs/DEPLOYMENT.md).
+ * It runs in two places: with the signed-in user's own session when they open
+ * the dashboard (row level security confines it to their data), and once a
+ * day for every account through /api/cron/retention with the service-role
+ * client, so accounts that never sign in again are covered too.
  */
 export async function purgeExpiredDocuments(supabase: Supabase, now: Date = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - RETENTION_DAYS * DAY_MS).toISOString()
 
-  const { data: jobs, error: jobsError } = await supabase
-    .from('extraction_jobs')
-    .select('id')
-    .lt('updated_at', cutoff)
-  if (jobsError || !jobs || jobs.length === 0) return 0
-
   const { data: documents, error: documentsError } = await supabase
     .from('uploaded_documents')
-    .select('id, storage_path')
-    .in('job_id', jobs.map((j) => j.id))
+    .select('id, storage_path, extraction_jobs!inner(updated_at)')
+    .lt('extraction_jobs.updated_at', cutoff)
     .is('purged_at', null)
+    .limit(PURGE_BATCH)
   if (documentsError) {
     // Most likely the retention migration has not been applied yet
     console.warn(`Retention purge skipped: ${documentsError.message}`)
@@ -96,4 +94,27 @@ export async function purgeExpiredDocuments(supabase: Supabase, now: Date = new 
   }
 
   return purged
+}
+
+export type RetentionNotice =
+  | { kind: 'removed' }
+  | { kind: 'due' }
+  | { kind: 'soon'; on: Date }
+  | null
+
+/**
+ * What a job page should say about its originals. Nothing while removal is
+ * more than a week away or the job has no documents.
+ */
+export function retentionNotice(
+  documents: { purged_at: string | null }[],
+  lastChanged: string | Date,
+  now: Date = new Date()
+): RetentionNotice {
+  if (documents.length === 0) return null
+  if (documents.every((d) => d.purged_at)) return { kind: 'removed' }
+  const days = daysUntilRemoval(lastChanged, now)
+  if (days === 0) return { kind: 'due' }
+  if (days <= 7) return { kind: 'soon', on: removalDate(lastChanged) }
+  return null
 }

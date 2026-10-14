@@ -33,8 +33,10 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Target worksheet chosen at approval
 - ✅ The user can correct the detected header row; field links are kept where the heading still exists
 - ✅ Start a new job from a previous job's template, instructions and field list
-- ⬜ A library of saved templates on the dashboard, independent of jobs
-- ⬜ Preview of the worksheet's existing rows
+- ⬜ A library of saved templates on the dashboard, independent of jobs (open
+  question for the product owner: "Start from a previous job" already reuses a template)
+- ✅ Preview of the worksheet's existing rows on Step 1, with how many rows are filled
+- ✅ Template limit of 4 MB, shown on the upload area
 
 ## Phase 3 — Documents and job tracking ✅
 
@@ -42,7 +44,13 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ 20 MB limit; type decided from file content, not name
 - ✅ Remove a document (and what was extracted from it); replace = remove + upload
 - ✅ Per-document status, overall progress line, failure reason, retry
-- ⬜ Direct-to-storage uploads (needed for files over ~4.5 MB on Vercel)
+- ✅ Uploads go from the browser straight to storage through a one-time link, then
+  the server reads the stored file back and checks it before recording it
+  (`/api/documents/upload-url`, `/api/documents/register`)
+- ✅ Limits shown on the upload area and checked before sending: 20 MB per file,
+  100 MB per upload; the storage buckets enforce the per-file limit too
+  (needs the `storage_size_limits` migration)
+- ✅ Status for every page of every document (read, records, part of the card before, nothing found)
 
 ## Phase 4 — AI extraction 🟡
 
@@ -51,10 +59,20 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ AI output normalized against the field list before saving; nothing invented
 - ✅ Safe re-runs; cancel between documents; failure reasons; retry
 - ✅ Mock mode for both services, clearly labelled on screen
-- ✅ Per-user rate limits (needs the `api_usage` migration applied)
-- ⬜ Very long PDFs holding many cards may exceed one AI call; needs batching
-- ⬜ Keep word confidence and source positions from Azure
-- ⬜ Background processing instead of one request per document
+- ✅ Per-user rate limits (checked against the real table)
+- ✅ A total after a run of day columns is always a number field, so it is checked and written to Excel as a number
+- ✅ Long PDFs are extracted 8 pages per AI call; a card cut where two parts meet is
+  joined into one record when its identifying fields match, and a value the two
+  halves disagree on is marked uncertain (`lib/extraction/page-batches.ts`)
+- ✅ Every page of a PDF is read: when Azure returns fewer pages than the file has
+  (the free tier stops after two), the rest are sent again until all are read; a
+  document that still comes back short is marked failed, never "read"
+- ✅ Word and table-cell positions kept from Azure (word confidence still discarded)
+- ✅ If a Gemini model is out of free quota or overloaded, the next one in
+  `GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS` is tried
+- ✅ Slow routes declare `maxDuration` (300 s) for Vercel
+- ⬜ Background processing instead of one request per document (not needed while
+  each request stays under the function time limit)
 
 ## Phase 5 — Validation and side-by-side review 🟡
 
@@ -66,8 +84,18 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Stacks vertically on a phone (checked at 390 px)
 - ✅ Start / end / break / total checks for clock-in style cards: overnight shifts,
   implausibly long shifts, break bounds, total against the times (`lib/validation/shift-checks.ts`)
-- ⬜ Let the user set the rounding and limits per job (a policy object exists; there is no screen for it)
-- ⬜ Source highlighting on the document
+- ✅ Per-job check settings on the Review step: most hours in one day (new check
+  on day cells), longest shift, longest break, rounding, tolerance for totals.
+  Approval uses the same settings. Copied with "Start from a previous job"
+  (needs the `job_check_policy` migration)
+- ✅ Pages are shown exactly as uploaded, scanned images and handwriting included
+  (PDF.js decoders shipped with the app); zoom is steady
+- ✅ Source highlighting: clicking into a value outlines where it was read — the
+  day's cell in the card's table, or the matching words nearest the field's
+  label — and turns to that page. Says so when a value cannot be found, and for
+  documents read before positions were kept
+- ✅ Pages drawn by the app (PDF.js) instead of the browser's PDF viewer, with
+  zoom and rotate for PDFs and images
 
 ## Phase 6 — Approval and Excel export ✅
 
@@ -75,7 +103,7 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Any later change cancels the approval
 - ✅ Export appends to a copy of the template, keeps formulas and unmapped cells,
   then reopens and verifies the file; private storage; download; history
-- ⬜ A real customer workbook opened in Excel after export (formatting, formulas)
+- ✅ Exported workbooks opened in Excel 16: no repair prompt, numbers are numbers, the template's formula kept
 
 ## Phase 7 — Pilot readiness 🟡
 
@@ -85,7 +113,8 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Retention behaviour documented; third-party services listed
 - ✅ Retention: original documents and their read text removed 30 days after a job's
   last change (needs the `document_retention` migration; runs when the user opens the dashboard)
-- ⬜ Scheduled retention for accounts that never sign in again
+- ✅ Daily retention run for every account (Vercel Cron → `/api/cron/retention`, protected by `CRON_SECRET`)
+- ✅ Signing out returns to the website; sign-in pages and the app link back to it
 - ✅ Account deletion from Settings (files, then the sign-in, which cascades)
 - ⬜ Accuracy measured on a set of real timecards
 - ✅ Deployment checklist written (`docs/DEPLOYMENT.md`); none of it carried out yet
@@ -118,10 +147,27 @@ panel on flagged fields, Better Auth if still wanted.
 | 2026-10-13 | Unit tests incl. shift checks | `npm test` (116 tests) | Pass |
 | 2026-10-13 | Account deletion: wrong email refused; right email removes sign-in, rows and files in all three buckets | Throwaway account, checked with the service role | Pass |
 | 2026-10-13 | Header-row correction: valid row re-reads columns, empty and invalid rows refused, restore | API calls as a test account | Pass (re-linking of fields not exercised) |
-| — | Retention purge against the database | Migration not applied yet | **Not yet verified** (date logic unit-tested) |
-| — | Cancel button during a batch | Needs a manual check | **Not yet verified** |
-| — | Real template + real card through to an Excel file opened in Excel | Needs Gemini quota | **Not yet verified** |
-| — | Rate limiting against the real `api_usage` table | Migration not applied yet | **Not yet verified** |
+| 2026-10-14 | Retention purge against the database | Test job aged 40 days, dashboard opened as its owner | Pass: file removed, read text cleared, `purged_at` set, records kept; a recent job untouched; banner says the originals were removed |
+| 2026-10-14 | Cancel button during a batch | Browser, 3 documents, extraction requests intercepted (no AI calls) | Pass: "Stopping after this document…", then "Cancelled — 1 processed, 0 failed, 2 not started"; one request sent |
+| 2026-10-14 | Header-row correction keeps field links | Browser form on a copied job | Pass: same row keeps 35/35 links; a wrong row unlinks all 35 with a warning; going back relinks 35/35 |
+| 2026-10-14 | Rate limiting against the real `api_usage` table | Usage filled to 30 field lists, then a real request | Pass: 429 with a plain message, refused call not counted; a user cannot delete their own usage rows |
+| 2026-10-14 | Real template-shaped workbook + two made-up typed cards, end to end in the browser | Live Azure + Gemini; title row, headings on row 3, an existing row with a SUM formula; one single-page card, one two-page card with a wrong written total | Pass: headings found on row 3; AI proposed 35 fields; every day value and both "S" days (as 0) correct on both cards; the two-page card came back as one record; the wrong total flagged; exported rows 5–6 below the existing row, formula kept. Found and fixed: the AI typed Total as text, which skipped the total check and wrote "221" as text |
+| 2026-10-14 | Source highlighting on the two made-up cards | Browser, after re-reading them with Azure | Pass: Card No, Company, day cells (including an "S" day recorded as 0), and the Total on page 2 outlined in the right place; a corrected value falls back to where the AI read it; zoom and rotate keep the outline on the value |
+| 2026-10-14 | Unit tests, typecheck, lint, production build, browser tests | `npm test` (164), `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:e2e` (3) | Pass |
+| 2026-10-14 | 10-page PDF of six made-up cards, one card split across pages 8–9 | Live Azure + Gemini in the browser | Found: Azure read only 2 of 10 pages (free tier) and the app called the document read. Fixed; after the fix all 10 pages read in 5 rounds (~24 s), extraction ran as pages 1–8 then 9–10, six records with every day and total correct, the split card joined into one complete record |
+| 2026-10-14 | Page reading in rounds, page batches, joining split cards | `npm test` | Pass |
+| 2026-10-14 | The product owner's handwritten demo card (2 pages, scanned sideways) through the whole app | Live Azure + Gemini (fallback model); copies deleted afterwards | ID, name, company, total and the days off on the front page right; on the back, days 28 and 29 swapped (total still 270, so no check could catch it — caught by comparing with the card). Highlighting found ID, name and days; "270" appears three times on the back, so the total was not highlighted rather than guessed |
+| 2026-10-14 | Exported workbooks opened in Excel | Excel 16 through COM | Pass: opened without repair; numbers typed as numbers; SUM in Excel matches; template formula kept |
+| 2026-10-14 | Direct uploads: 21 MB file refused in the browser before sending; a card sent straight to storage and registered | Browser, request log | Pass |
+| 2026-10-14 | Daily retention run reaches an account nobody is signed in to; wrong or missing secret refused | Second test account, aged job | Pass |
+| 2026-10-14 | Sign-out lands on the website; "Back to the website" on sign-in | Browser | Pass |
+| 2026-10-14 | Sideways page opens upright, highlight still on the value | Made-up sideways card, browser | Pass — later removed at the product owner's request: pages now show as uploaded |
+| 2026-10-14 | Product owner found the review page missing the scan's handwriting, and the page shaking at 150% | Reproduced: PDF.js skipped the scan's image layers ("JBig2 failed to initialize") | Fixed by shipping PDF.js's decoders; the scan renders in full with no warnings |
+| 2026-10-14 | Page holds still when zooming | 210 window sizes × zoom steps with real scrollbars, counting redraws | Pass: no redraws after settling, no size changes. The original shaking could not be reproduced in an automated browser; all three likely causes were removed (scrollbar changing the width, redraw blanking the page, loading text changing the panel size) |
+| 2026-10-14 | Unit tests, typecheck, lint, production build, browser tests (isolation now covers the upload-link and register routes) | `npm test` (191), `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:e2e` (3) | Pass |
+| 2026-10-14 | Saving per-job check settings | Browser after the migration: limit set to 8.5 h, then back to standard | Pass: the 9-hour day flagged, then not; an out-of-range value refused with a message |
+| 2026-10-14 | Bucket size limits | Read back from `storage.buckets` | Pass: 20 MB on source-documents |
+| — | Source highlighting on handwritten or photographed cards | Only typed PDFs tried | **Not yet verified** |
 | 2026-10-13 | Two-page handwritten time card against a 36-column day template | Live Azure + Gemini as a test account; test data deleted afterwards | One record, day cells added up to the card total; the handwritten name was misread without being flagged |
 | 2026-10-13 | Failed extraction shows its reason and can be retried | Gemini was busy on the first attempt | Pass |
 | 2026-10-13 | Approve blocked by open issues; approve; export; download; reopen the file | API calls as a test account on a synthetic job, file read back with ExcelJS | Pass: existing row kept, 2 records appended, numbers typed |
