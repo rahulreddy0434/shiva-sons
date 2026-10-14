@@ -25,11 +25,14 @@ app/(app)/                  signed-in shell (sidebar layout)
   extraction/new/           name and create a job
   extraction/[jobId]/       wizard: layout + template, instructions,
                             documents, review, export
-app/api/                    route handlers (uploads, schema, OCR, extraction, job delete)
+app/api/                    route handlers (uploads, schema, OCR, extraction, review,
+                            approval, export, account, cron)
 components/                 client components, grouped by feature
 lib/supabase/               server and browser Supabase clients
-lib/excel/                  workbook parsing
-lib/extraction/             field-schema building, wizard progress
+lib/excel/                  workbook parsing, preview, filling the template
+lib/extraction/             field-schema building, wizard progress, page batches, page status
+lib/validation/             checks on extracted values, per-job check settings
+lib/review/                 source highlighting, approval summary
 lib/azure/                  Document Intelligence client → normalized pages
 lib/llm/                    prompts + provider (the only place that knows about Gemini)
 supabase/migrations/        database schema, in order
@@ -89,14 +92,34 @@ already applied so it is not re-run:
 
 ## Processing
 
+Uploads go straight from the browser to Supabase Storage: `/api/documents/upload-url`
+checks the job and the size and returns a one-time link to a new path in the
+user's own folder; the browser sends the file there; `/api/documents/register`
+reads the stored bytes back, checks the real type, size and that a PDF opens,
+then records the document — or deletes the file. No document passes through a
+Vercel function, so its ~4.5 MB request limit does not apply. Limits: 20 MB per
+file, 100 MB per upload (`lib/documents/validate-upload.ts`), with the bucket
+enforcing the per-file limit too. Excel templates (at most 4 MB) still go through
+`/api/workbooks/upload`.
+
 The browser drives the batch: it calls `/api/extraction/process` (OCR) and
 `/api/extraction/extract` (LLM) once per document, so no single request
 handles a whole batch and progress can be shown and cancelled between
 documents.
 
-Extraction sends every page of one document (text plus the tables OCR found)
-in a single LLM call, because a time card often continues on the next page
-and must come back as one record. The model's answer is untrusted:
+OCR must read every page. Azure can return fewer pages than the PDF has (the
+free tier reads only the first two of each file), so `analyzeDocument` sends
+the remaining pages again as a smaller PDF until all are read; if pages are
+still missing, the process route marks the document failed with the count.
+
+Extraction sends the pages of one document (text plus the tables OCR found)
+in one LLM call, because a time card often continues on the next page and
+must come back as one record. A document longer than 8 pages is sent in parts
+of 8 (`lib/extraction/page-batches.ts`, driven page range by page range from
+the browser). When the first record of a part has the same identifying values
+as the last record of the part before, it is the same card cut in two and is
+merged into that record; values the halves disagree on are kept but marked
+uncertain. The model's answer is untrusted:
 `lib/extraction/normalize-records.ts` reduces it to exactly one clean value
 per schema field before anything is stored. Both steps are safe to re-run —
 OCR pages are upserted and re-extraction replaces earlier AI records — and a
@@ -105,8 +128,33 @@ failure stores a plain-language reason on the document.
 Customer-specific rules (for example "enter 0 for a day not worked") live in
 the job's instructions text, which the user sees and edits, not in the prompt.
 
-Known gaps, tracked in the implementation plan: a very long PDF may not fit
-one LLM call, and word confidence and source positions from Azure are discarded.
+OCR keeps the position of every word and table cell, stored in `ocr_raw` as
+boxes in fractions of the page (`lib/azure/document-intelligence.ts`). The
+review screen draws each page itself with PDF.js (its worker is copied to
+`public/pdfjs/` by `scripts/copy-pdf-worker.mjs` before `dev` and
+`build`) and, when the reviewer clicks into a value,
+`lib/review/source-locator.ts` finds where it was read: for a day column, the
+cell in that day's row of the card's table; for a single value, the matching
+words, nearest the field's label if the text appears more than once. It
+searches only the record's own pages and returns nothing rather than guess;
+the viewer then says the value could not be found. Pages read before positions
+were kept cannot be highlighted until they are read again.
+
+The viewer shows every page exactly as it was uploaded (no automatic
+turning); the reviewer can zoom and rotate. PDF.js needs its decoders for
+scanned images (`public/pdfjs/wasm/` and friends, copied by
+`scripts/copy-pdf-worker.mjs`) — without them the image layer of many scans,
+including the handwriting, is silently left out. The viewer reserves the
+scrollbar's space and draws each new size off-screen, so zooming never makes
+the page resize itself in a loop or flicker.
+
+Each job has check settings (`extraction_jobs.check_policy`, null = defaults in
+`lib/validation/check-policy.ts`): most hours in one day, longest shift and
+break, rounding, and the tolerance for totals. They only decide what is
+flagged. The Review screen and approval pass the same settings to
+`validateRecords`, so approval never disagrees with what the reviewer saw.
+
+Known gap, tracked in the implementation plan: Azure's word confidence is discarded.
 
 ## LLM provider and cost
 
@@ -132,7 +180,11 @@ pricing page before budgeting.
 | OpenAI GPT-5.4 nano | $0.20 | $1.25 | $0.0025 |
 
 The Gemini free tier allowed 20 requests per day on `gemini-3.8-flash` when
-tested, which is enough for a handful of manual tests and nothing more.
+tested, which is enough for a handful of manual tests and nothing more. Each
+model has its own free quota, so the provider tries `GEMINI_MODEL` and then
+each of `GEMINI_FALLBACK_MODELS` (default `gemini-3.7-flash,gemini-3.5-flash`)
+when a model is out of quota or stays overloaded. With a paid key, set the
+fallbacks to an empty value to use one model only.
 
 Azure Document Intelligence is billed separately per page analysed.
 
@@ -169,8 +221,9 @@ Current behaviour, also stated on the privacy page and in Settings
   days after their job was last changed. The document row stays, marked
   `purged_at`, so the job still shows what was processed and extracted
   records keep their link. The purge runs with the user's own session when
-  they open the dashboard; accounts that never return need a scheduled job
-  (see DEPLOYMENT.md).
+  they open the dashboard, and once a day for every account through
+  `/api/cron/retention` (Vercel Cron, `vercel.json`), so accounts that never
+  return are covered too.
 - Extracted values, corrections, approvals, Excel templates and generated
   files are kept until the user deletes the job.
 - Deleting a job removes its files from all three storage buckets and then
@@ -180,13 +233,16 @@ Current behaviour, also stated on the privacy page and in Settings
   the review screen, ten minutes for downloads).
 - Deleting an account (Settings) removes every file in the user's folders
   with their own session, then deletes the sign-in with the service-role
-  client (`lib/supabase/admin.ts`), which cascades through every table. That
-  is the only place the application uses the service-role key.
+  client (`lib/supabase/admin.ts`), which cascades through every table.
+- The service-role key is used in exactly two places: account deletion (after
+  the caller is identified with their own session, and only on their own id)
+  and the daily retention run (which checks `CRON_SECRET` first).
 
 ## Deployment notes
 
-- Uploads pass through a route handler. Vercel limits a request body to about
-  4.5 MB on its serverless functions, well under the app's 20 MB file limit;
-  larger files will need direct-to-storage signed uploads before going live.
-- OCR and extraction run inside one request per document. A long or busy
-  call can exceed the function time limit on Vercel's lower plans.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the step-by-step guide.
+
+- Documents upload straight to storage, so Vercel's ~4.5 MB request limit only
+  matters for Excel templates, which are capped at 4 MB for that reason.
+- Reading, extraction and field generation declare `maxDuration = 300`, the
+  most Vercel's Hobby plan allows. A long PDF is extracted 8 pages per request.

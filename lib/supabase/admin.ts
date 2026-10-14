@@ -3,10 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 /**
  * A client with the service-role key, which bypasses row level security.
  *
- * It exists for the few operations a user's own session cannot perform
- * (deleting their sign-in). Rules: server only; never import this from a
- * client component; always establish who the caller is with the normal
- * client first and act only on that user's own id.
+ * It exists for the few operations a user's own session cannot perform:
+ * deleting their sign-in, and the daily retention run across all accounts.
+ * Rules: server only; never import this from a client component. For a user
+ * action, establish who the caller is with the normal client first and act
+ * only on that user's own id; the scheduled run checks CRON_SECRET instead.
  */
 export function createAdminClient() {
   if (typeof window !== 'undefined') {

@@ -34,7 +34,7 @@ export default async function ExportStepPage({
       .order('created_at', { ascending: false }),
   ])
 
-  const summary = summarizeRecords(data.fields, data.records)
+  const summary = summarizeRecords(data.fields, data.records, data.policy)
 
   const sheets: SheetOption[] = data.sheets.map((sheet) => {
     const { columns, unmapped } = resolveExportColumns(data.fields, sheet.columns)

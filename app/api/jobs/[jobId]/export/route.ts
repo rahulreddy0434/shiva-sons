@@ -44,7 +44,7 @@ export async function POST(
 
   // Belt and braces: the approval is superseded on every edit, but never
   // export anything the approval did not cover
-  const summary = summarizeRecords(data.fields, data.records)
+  const summary = summarizeRecords(data.fields, data.records, data.policy)
   const { columns } = resolveExportColumns(data.fields, sheet.columns)
   const blockers = approvalBlockers(summary, columns.length)
   if (blockers.length > 0 || summary.recordCount !== approval.record_count) {

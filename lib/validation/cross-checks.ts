@@ -2,6 +2,8 @@ import type { ExtractionField } from '@/types/extraction'
 import { groupFields } from '@/lib/review/group-fields'
 import { isValidNumber, validateRecord, type FieldIssue, type FieldValue } from './validate-record'
 import { shiftIssues } from './shift-checks'
+import { DEFAULT_CHECK_POLICY, type CheckPolicy } from './check-policy'
+import { isDayOfMonthHeader } from '@/lib/extraction/suggested-instructions'
 
 export interface CheckableRecord {
   id: string
@@ -11,8 +13,6 @@ export interface CheckableRecord {
 /** A label that reads like the total of the cells before it: "T/HRS", "Total hours", "Hrs". */
 const TOTAL_LABEL = /total|t\s*\/?\s*hrs|\bhrs\b|\bhours\b/i
 
-/** Differences smaller than this are rounding, not a mismatch. */
-const TOLERANCE = 0.01
 
 function numberOf(value: FieldValue | undefined): number | null | 'invalid' {
   const text = (value?.value ?? '').trim()
@@ -31,7 +31,9 @@ export function findSeriesTotals(fields: ExtractionField[]): { cells: Extraction
   groups.forEach((group, index) => {
     if (group.kind !== 'series' || group.fields[0].dataType !== 'number') return
     const next = groups[index + 1]
-    if (next?.kind === 'single' && next.field.dataType === 'number' && TOTAL_LABEL.test(next.field.label)) {
+    // A total typed as text still holds a number on most cards; a non-numeric value is skipped below
+    const numericTotal = next?.kind === 'single' && (next.field.dataType === 'number' || next.field.dataType === 'string')
+    if (numericTotal && TOTAL_LABEL.test(next.field.label)) {
       pairs.push({ cells: group.fields, total: next.field })
     }
   })
@@ -40,7 +42,7 @@ export function findSeriesTotals(fields: ExtractionField[]): { cells: Extraction
 }
 
 /** Flags a total that disagrees with the cells it should be the sum of. */
-function totalMismatch(fields: ExtractionField[], record: CheckableRecord): FieldIssue[] {
+function totalMismatch(fields: ExtractionField[], record: CheckableRecord, policy: CheckPolicy): FieldIssue[] {
   const issues: FieldIssue[] = []
 
   for (const { cells, total } of findSeriesTotals(fields)) {
@@ -52,7 +54,8 @@ function totalMismatch(fields: ExtractionField[], record: CheckableRecord): Fiel
     if (numbers.includes('invalid')) continue
 
     const sum = (numbers as (number | null)[]).reduce<number>((a, b) => a + (b ?? 0), 0)
-    if (Math.abs(sum - stated) > TOLERANCE) {
+    // Differences within the job's tolerance are rounding, not a mismatch
+    if (Math.abs(sum - stated) > Math.max(policy.toleranceHours, 0.005)) {
       const first = cells[0].label
       const last = cells[cells.length - 1].label
       issues.push({
@@ -64,6 +67,27 @@ function totalMismatch(fields: ExtractionField[], record: CheckableRecord): Fiel
     }
   }
 
+  return issues
+}
+
+/** Flags a day cell holding more hours than anyone works in one day. */
+function dayLimit(fields: ExtractionField[], record: CheckableRecord, policy: CheckPolicy): FieldIssue[] {
+  const issues: FieldIssue[] = []
+  for (const group of groupFields(fields)) {
+    if (group.kind !== 'series' || group.fields[0].dataType !== 'number') continue
+    if (!group.fields.every((f) => isDayOfMonthHeader(f.label))) continue
+    for (const field of group.fields) {
+      const value = numberOf(record.values[field.key])
+      if (typeof value === 'number' && value > policy.maxHoursPerDay) {
+        issues.push({
+          fieldKey: field.key,
+          type: 'out_of_range',
+          severity: 'warning',
+          message: `${value} hours is more than the ${policy.maxHoursPerDay} allowed in one day. Check it against the document.`,
+        })
+      }
+    }
+  }
   return issues
 }
 
@@ -108,7 +132,8 @@ function duplicates(fields: ExtractionField[], records: CheckableRecord[]): Map<
  */
 export function validateRecords(
   fields: ExtractionField[],
-  records: CheckableRecord[]
+  records: CheckableRecord[],
+  policy: CheckPolicy = DEFAULT_CHECK_POLICY
 ): Map<string, FieldIssue[]> {
   const duplicateIssues = duplicates(fields, records)
   const result = new Map<string, FieldIssue[]>()
@@ -117,7 +142,11 @@ export function validateRecords(
     const issues = validateRecord(fields, record.values)
     const taken = new Set(issues.map((i) => i.fieldKey))
 
-    const extra = [...totalMismatch(fields, record), ...shiftIssues(fields, record.values)]
+    const extra = [
+      ...totalMismatch(fields, record, policy),
+      ...dayLimit(fields, record, policy),
+      ...shiftIssues(fields, record.values, policy),
+    ]
     const duplicate = duplicateIssues.get(record.id)
     if (duplicate) extra.push(duplicate)
 

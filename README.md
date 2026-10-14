@@ -33,6 +33,11 @@ The product is under active development — see
 | `npm run lint` | ESLint |
 | `npm run build` | Production build |
 
+## Deploying
+
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) walks through putting the app on
+Vercel, step by step.
+
 ## Documentation
 
 - [docs/PRD.md](docs/PRD.md) — product requirements

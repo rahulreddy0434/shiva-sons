@@ -20,9 +20,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col bg-white text-ink md:flex-row">
       <aside className="shrink-0 border-b border-line bg-white p-4 md:w-56 md:border-b-0 md:border-r md:p-6 flex flex-col">
-        <p className="text-lg font-semibold text-ink">
+        <Link href="/" title="Go to the website" className="text-lg font-semibold text-ink">
           Shiva Sons <span className="text-brand">Technologies</span>
-        </p>
+        </Link>
         <p className="text-xs text-ink-muted mb-4 md:mb-8">Document to Excel</p>
         <nav className="flex flex-wrap gap-1 text-sm md:flex-col">
           {NAV_LINKS.map((link) => (
@@ -37,6 +37,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </nav>
         <div className="mt-4 pt-4 border-t border-line text-xs text-ink-muted space-y-2 md:mt-auto md:pt-5">
           <p className="break-all">{user.email}</p>
+          <Link href="/" className="block hover:text-ink">
+            Website
+          </Link>
           <SignOutButton />
         </div>
       </aside>

@@ -19,8 +19,8 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    // Full Chromium in headless mode: unlike the default headless shell it
-    // includes the PDF viewer the review screen embeds
+    // Full Chromium in headless mode, closest to what a reviewer uses (the
+    // review screen draws PDF pages itself with PDF.js)
     channel: 'chromium',
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
@@ -30,7 +30,7 @@ export default defineConfig({
   // made and no quota is used. Supabase is real: they run as the test account.
   // Stop any other `next dev` in this folder first — two cannot share it.
   webServer: {
-    command: `npx next dev -p ${PORT}`,
+    command: `node scripts/copy-pdf-worker.mjs && npx next dev -p ${PORT}`,
     url: `http://localhost:${PORT}/sign-in`,
     env: { MOCK_AI: 'true' },
     reuseExistingServer: false,

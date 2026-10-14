@@ -7,7 +7,8 @@ import { MAX_HEADER_ROW, readSheetColumns } from '@/lib/excel/parse-workbook'
  * Body: { sheetId, headerRow } — headerRow is the row number as Excel shows it.
  *
  * The worksheet's columns are re-read from that row. Fields that were linked
- * to a column keep their link when a column with the same heading still exists.
+ * to a column keep their link when a column with the same heading still exists,
+ * and unlinked fields are linked to a heading spelled like their name.
  */
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
   }
   const { data: file } = await supabase
     .from('workbook_files')
-    .select('storage_path')
+    .select('storage_path, job_id')
     .eq('id', sheet.workbook_file_id)
     .maybeSingle()
   if (!file) {
@@ -84,17 +85,39 @@ export async function POST(request: Request) {
   // Re-link fields to the column that now carries the same heading
   const newIdByName = new Map<string, string>()
   for (const col of inserted ?? []) if (!newIdByName.has(col.column_name)) newIdByName.set(col.column_name, col.id)
-  let relinked = 0
   for (const field of linkedFields ?? []) {
     const name = oldNameById.get(field.target_column_id as string)
     const newId = name ? newIdByName.get(name) : undefined
     if (!newId) continue
     await supabase.from('extraction_fields').update({ target_column_id: newId }).eq('id', field.id)
-    relinked++
   }
 
-  return NextResponse.json({
-    columns: columns.length,
-    unlinkedFields: (linkedFields?.length ?? 0) - relinked,
-  })
+  // Fields with no link (for example after choosing a wrong row and coming
+  // back) are matched to a heading spelled like their name, as at creation
+  const newIdByLooseName = new Map<string, string>()
+  for (const col of inserted ?? []) {
+    const loose = col.column_name.trim().toLowerCase()
+    if (!newIdByLooseName.has(loose)) newIdByLooseName.set(loose, col.id)
+  }
+  const { data: schema } = await supabase
+    .from('extraction_schemas')
+    .select('id')
+    .eq('job_id', file.job_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const { data: unlinked } = schema
+    ? await supabase.from('extraction_fields').select('id, label').eq('schema_id', schema.id).is('target_column_id', null)
+    : { data: [] }
+  let stillUnlinked = 0
+  for (const field of unlinked ?? []) {
+    const columnId = newIdByLooseName.get(field.label.trim().toLowerCase())
+    if (!columnId) {
+      stillUnlinked++
+      continue
+    }
+    await supabase.from('extraction_fields').update({ target_column_id: columnId }).eq('id', field.id)
+  }
+
+  return NextResponse.json({ columns: columns.length, unlinkedFields: stillUnlinked })
 }

@@ -33,7 +33,10 @@ export async function proxy(request: NextRequest) {
   // The marketing site is open to everyone
   const isPublicRoute = ['/', '/privacy', '/terms'].includes(request.nextUrl.pathname)
 
-  if (!user && !isAuthRoute && !isPublicRoute) {
+  // Scheduled jobs carry their own secret instead of a session (see app/api/cron)
+  const isCronRoute = request.nextUrl.pathname.startsWith('/api/cron/')
+
+  if (!user && !isAuthRoute && !isPublicRoute && !isCronRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/sign-in'
     return NextResponse.redirect(url)
@@ -49,5 +52,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // pdfjs/: the PDF viewer's worker and decoders (public, no data in them)
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|pdfjs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mjs)$).*)'],
 }

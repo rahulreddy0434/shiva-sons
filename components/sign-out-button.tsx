@@ -9,7 +9,8 @@ export function SignOutButton() {
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/sign-in')
+    // Back to the public website, where they can sign in again or look around
+    router.push('/')
     router.refresh()
   }
 

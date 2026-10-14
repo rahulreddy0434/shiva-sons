@@ -1,7 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { requireStep } from '@/lib/extraction/job-progress'
-import { ReviewWorkspace, type ReviewDocument, type ReviewRecord } from '@/components/review/review-workspace'
+import {
+  ReviewWorkspace,
+  type ReviewDocument,
+  type ReviewPage,
+  type ReviewRecord,
+} from '@/components/review/review-workspace'
 import { purgedDocumentIds } from '@/lib/retention'
+import { loadCheckPolicy } from '@/lib/review/load-job'
+import { CheckSettings } from '@/components/review/check-settings'
 import type { ExtractionField } from '@/types/extraction'
 
 // How long the links to the original files stay valid after the page loads
@@ -27,7 +34,7 @@ export default async function ReviewStepPage({
       .maybeSingle(),
     supabase
       .from('uploaded_documents')
-      .select('id, original_filename, file_type, status, storage_path, document_pages(id, page_number, text:ocr_raw->>text)')
+      .select('id, original_filename, file_type, status, storage_path, document_pages(id, page_number, text:ocr_raw->>text, words:ocr_raw->words, tables:ocr_raw->tables)')
       .eq('job_id', jobId)
       .order('created_at', { ascending: true }),
     supabase
@@ -48,6 +55,7 @@ export default async function ReviewStepPage({
     .sort((a, b) => a.sortOrder - b.sortOrder)
 
   const purged = await purgedDocumentIds(supabase, jobId)
+  const policy = await loadCheckPolicy(supabase, jobId)
   const paths = (documentRows ?? []).filter((d) => !purged.has(d.id)).map((d) => d.storage_path)
   const { data: signed } = paths.length
     ? await supabase.storage.from('source-documents').createSignedUrls(paths, SIGNED_URL_SECONDS)
@@ -63,7 +71,14 @@ export default async function ReviewStepPage({
     purged: purged.has(d.id),
     pages: [...d.document_pages]
       .sort((a, b) => a.page_number - b.page_number)
-      .map((p) => ({ id: p.id, pageNumber: p.page_number, text: (p.text as string | null) ?? '' })),
+      .map((p) => ({
+        id: p.id,
+        pageNumber: p.page_number,
+        text: (p.text as string | null) ?? '',
+        // Pages read before positions were kept have no words, and tables without boxes
+        words: (p.words as ReviewPage['words'] | null) ?? [],
+        tables: (p.tables as ReviewPage['tables'] | null) ?? [],
+      })),
   }))
 
   const records: ReviewRecord[] = (recordRows ?? []).map((r) => ({
@@ -85,7 +100,8 @@ export default async function ReviewStepPage({
       <p className="text-sm text-ink-muted mb-4">
         Check each record against the original document. Correct anything that is wrong, then mark the record reviewed.
       </p>
-      <ReviewWorkspace fields={fields} documents={documents} records={records} />
+      <CheckSettings jobId={jobId} policy={policy} />
+      <ReviewWorkspace fields={fields} documents={documents} records={records} policy={policy} />
     </div>
   )
 }

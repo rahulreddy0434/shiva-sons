@@ -37,7 +37,7 @@ export async function POST(
     return NextResponse.json({ error: 'Choose the worksheet to fill.' }, { status: 400 })
   }
 
-  const summary = summarizeRecords(data.fields, data.records)
+  const summary = summarizeRecords(data.fields, data.records, data.policy)
   const { columns } = resolveExportColumns(data.fields, sheet.columns)
   const blockers = approvalBlockers(summary, columns.length)
   if (blockers.length > 0) {

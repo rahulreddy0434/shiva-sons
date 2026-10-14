@@ -2,26 +2,50 @@
 
 import { useState } from 'react'
 import { RETENTION_DAYS } from '@/lib/retention'
+import type { SourceLocation } from '@/lib/review/source-locator'
 import type { ReviewDocument } from './review-workspace'
+import { PageCanvas } from './page-canvas'
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3]
 
+/** The value the reviewer is looking at, and where it was found on the original, if anywhere. */
+export interface Highlight {
+  documentId: string
+  label: string
+  /** Null when the value could not be found; `reason` says why. */
+  location: SourceLocation | null
+  reason?: 'not_found' | 'no_positions'
+}
+
+function highlightNote(highlight: Highlight): string {
+  if (highlight.location?.match === 'row') {
+    return `Highlighted: the row for “${highlight.label}”. The value in the box was not matched to one cell — check it.`
+  }
+  if (highlight.location) return `Highlighted: where “${highlight.label}” was read.`
+  if (highlight.reason === 'no_positions') {
+    return 'Positions were not recorded when this document was read, so values cannot be highlighted on it.'
+  }
+  return `“${highlight.label}” could not be found on the document — check it by eye.`
+}
+
 /**
  * Left-hand panel of the review screen: the original upload, always visible
- * beside the extracted data. PDFs use the browser's own PDF viewer (which
- * brings its zoom and rotate controls); images get zoom and rotate here.
+ * beside the extracted data, with zoom and rotate. When the reviewer works on
+ * a value, the place it was read from is outlined on the page.
  */
 export function DocumentViewer({
   documents,
   documentId,
   pageNumber,
   attentionByDocument,
+  highlight,
   onNavigate,
 }: {
   documents: ReviewDocument[]
   documentId: string
   pageNumber: number
   attentionByDocument: Record<string, number>
+  highlight: Highlight | null
   onNavigate: (documentId: string, pageNumber: number) => void
 }) {
   const [zoomIndex, setZoomIndex] = useState(2)
@@ -31,6 +55,9 @@ export function DocumentViewer({
   const pageCount = Math.max(doc?.pages.length ?? 0, 1)
   const isPdf = doc?.fileType === 'pdf'
   const unread = doc ? doc.pages.length === 0 && !doc.purged : false
+  const shownHighlight = highlight && highlight.documentId === documentId ? highlight : null
+  const boxes =
+    shownHighlight?.location && shownHighlight.location.pageNumber === pageNumber ? shownHighlight.location.boxes : []
 
   return (
     <section
@@ -85,7 +112,7 @@ export function DocumentViewer({
           </button>
         </div>
 
-        {!isPdf && (
+        {doc?.url && (
           <div className="flex items-center gap-1 text-sm">
             <button
               type="button"
@@ -124,6 +151,17 @@ export function DocumentViewer({
         )}
       </div>
 
+      {shownHighlight && !doc?.purged && (
+        <p
+          role="status"
+          className={`border-b border-line px-3 py-1.5 text-xs ${
+            shownHighlight.location ? 'bg-brand-blue-soft text-brand-blue' : 'bg-surface text-ink-muted'
+          }`}
+        >
+          {highlightNote(shownHighlight)}
+        </p>
+      )}
+
       {unread && (
         <p className="border-b border-line bg-brand-soft px-3 py-2 text-xs text-brand-strong">
           ⚠ This document has not been read yet{doc?.status === 'failed' ? ' — processing failed' : ''}. Go back to
@@ -131,7 +169,8 @@ export function DocumentViewer({
         </p>
       )}
 
-      <div className="min-h-[60vh] flex-1 overflow-auto bg-surface lg:min-h-0">
+      {/* The scrollbar's space is always kept, so it appearing never changes the page width */}
+      <div className="min-h-[60vh] flex-1 overflow-auto bg-surface [scrollbar-gutter:stable] lg:min-h-0">
         {doc?.purged ? (
           <p className="p-4 text-sm text-ink-muted">
             The original of this document was removed {RETENTION_DAYS} days after the job was last changed, under the
@@ -139,22 +178,18 @@ export function DocumentViewer({
           </p>
         ) : !doc?.url ? (
           <p className="p-4 text-sm text-danger">✕ The original file could not be opened.</p>
-        ) : isPdf ? (
-          // Keyed so that changing page reloads the viewer at that page
-          <iframe
-            key={`${doc.id}-${pageNumber}`}
-            src={`${doc.url}#page=${pageNumber}&view=FitH&navpanes=0`}
-            title={`${doc.name}, page ${pageNumber}`}
-            className="h-full min-h-[60vh] w-full"
-          />
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL to a private upload
-          <img
-            src={doc.url}
-            alt={`Original upload: ${doc.name}`}
-            style={{ width: `${ZOOM_STEPS[zoomIndex] * 100}%`, transform: `rotate(${rotation}deg)` }}
-            className="max-w-none origin-center"
-          />
+          <div className="p-3">
+            <PageCanvas
+              url={doc.url}
+              isPdf={isPdf}
+              pageNumber={pageNumber}
+              zoom={ZOOM_STEPS[zoomIndex]}
+              rotation={rotation}
+              highlights={boxes}
+              alt={`${doc.name}, page ${pageNumber}`}
+            />
+          </div>
         )}
       </div>
     </section>

@@ -175,3 +175,21 @@ describe('buildFieldsFromInstructions', () => {
     await expect(buildFieldsFromInstructions('x', [])).rejects.toThrow('Gemini unavailable')
   })
 })
+
+describe('buildFieldsFromInstructions — totals', () => {
+  it('makes a total after a run of day columns a number even if the model said text', async () => {
+    mockPropose.mockResolvedValue([
+      { key: 'name', label: 'Name', dataType: 'string', required: true },
+      ...[1, 2, 3, 4, 5].map((d) => ({ key: 'day_' + d, label: String(d), dataType: 'number' })),
+      { key: 'total', label: 'Total', dataType: 'string' },
+      { key: 'remarks', label: 'Remarks', dataType: 'string' },
+    ])
+    const fields = await buildFieldsFromInstructions('x', [])
+    expect(fields.map((f) => [f.key, f.dataType])).toEqual([
+      ['name', 'string'],
+      ...[1, 2, 3, 4, 5].map((d) => ['day_' + d, 'number']),
+      ['total', 'number'],
+      ['remarks', 'string'],
+    ])
+  })
+})

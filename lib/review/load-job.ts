@@ -1,5 +1,6 @@
 import type { createClient } from '@/lib/supabase/server'
 import type { FieldValue } from '@/lib/validation/validate-record'
+import { readCheckPolicy, type CheckPolicy } from '@/lib/validation/check-policy'
 import type { MappableField, SheetColumn } from './job-summary'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -19,6 +20,17 @@ export interface JobExportData {
   records: { id: string; reviewed: boolean; values: Record<string, FieldValue> }[]
   workbook: { id: string; storagePath: string; filename: string } | null
   sheets: JobSheet[]
+  /** The job's own check settings, so approval flags exactly what Review showed. */
+  policy: CheckPolicy
+}
+
+/**
+ * The job's check settings, or the defaults. Read on its own so that a
+ * database without the check_policy column yet still works.
+ */
+export async function loadCheckPolicy(supabase: Supabase, jobId: string): Promise<CheckPolicy> {
+  const { data, error } = await supabase.from('extraction_jobs').select('check_policy').eq('id', jobId).maybeSingle()
+  return readCheckPolicy(error ? null : data?.check_policy)
 }
 
 /**
@@ -118,6 +130,7 @@ export async function loadJobExportData(supabase: Supabase, jobId: string): Prom
       ? { id: workbookFile.id, storagePath: workbookFile.storage_path, filename: workbookFile.original_filename }
       : null,
     sheets,
+    policy: await loadCheckPolicy(supabase, jobId),
   }
 }
 

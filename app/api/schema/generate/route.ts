@@ -4,6 +4,10 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { buildFieldsFromColumns, buildFieldsFromInstructions } from '@/lib/extraction/schema-builder'
 import { describeLlmError } from '@/lib/llm/errors'
 
+// Reading a document or waiting on a busy AI model can take minutes; 300 s is
+// the most Vercel's Hobby plan allows (see docs/DEPLOYMENT.md)
+export const maxDuration = 300
+
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

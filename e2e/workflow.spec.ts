@@ -105,7 +105,8 @@ test('create a job, extract, review side by side, approve, export and delete', a
   await expect(viewer).toBeVisible()
   await expect(data).toBeVisible()
   await expect(viewer.getByText('Page 1 of 2')).toBeVisible()
-  await expect(viewer.locator('iframe')).toBeVisible()
+  // The page is drawn by the app itself, so a value's source can be outlined on it
+  await expect(viewer.getByRole('img', { name: /synthetic-timecard.pdf, page 1/ })).toBeVisible()
 
   // Side by side on a desktop-width screen: both panels share a row
   const viewerBox = (await viewer.boundingBox())!
@@ -134,6 +135,9 @@ test('create a job, extract, review side by side, approve, export and delete', a
 
   // Correct a value, save, and find it still there after a reload
   const name = page.getByLabel(/^Employee name/)
+  // Mock OCR records no positions, and the viewer says so instead of guessing
+  await name.click()
+  await expect(viewer.getByRole('status')).toContainText('Positions were not recorded')
   await name.fill('Asha Rao (edited)')
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.getByText('AI read “MOCK Employee name”')).toBeVisible()

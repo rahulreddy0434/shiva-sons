@@ -1,13 +1,11 @@
 import type { createClient } from '@/lib/supabase/server'
 import type { ParsedWorkbook } from '@/types/workbook'
 import { parseWorkbook } from './parse-workbook'
+import { MAX_WORKBOOK_BYTES } from './limits'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
 export const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-
-/** Starting limit; Vercel's own request-size limit may be lower in production. */
-export const MAX_WORKBOOK_BYTES = 20 * 1024 * 1024
 
 /** A problem the user can fix; its message is safe to show as-is. */
 export class WorkbookError extends Error {

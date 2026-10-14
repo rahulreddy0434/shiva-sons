@@ -3,6 +3,8 @@
 import { useCallback, useState } from 'react'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { useRouter } from 'next/navigation'
+import { MAX_WORKBOOK_BYTES } from '@/lib/excel/limits'
+import { formatBytes } from '@/lib/documents/validate-upload'
 
 export function ExcelDropzone({ jobId }: { jobId: string }) {
   const [uploading, setUploading] = useState(false)
@@ -17,6 +19,10 @@ export function ExcelDropzone({ jobId }: { jobId: string }) {
 
     const file = acceptedFiles[0]
     if (!file) return
+    if (file.size > MAX_WORKBOOK_BYTES) {
+      setError(`${file.name} is ${formatBytes(file.size)}; templates can be up to ${formatBytes(MAX_WORKBOOK_BYTES)}.`)
+      return
+    }
 
     setUploading(true)
     setError(null)
@@ -59,7 +65,12 @@ export function ExcelDropzone({ jobId }: { jobId: string }) {
         ) : isDragActive ? (
           <p>Drop the file here…</p>
         ) : (
-          <p>Drag and drop your Excel template here, or <strong className="text-ink">browse files</strong></p>
+          <>
+            <p>Drag and drop your Excel template here, or <strong className="text-ink">browse files</strong></p>
+            <p className="mt-2 text-xs text-ink-muted">
+              One .xlsx file, up to <strong className="text-ink">{formatBytes(MAX_WORKBOOK_BYTES)}</strong>
+            </p>
+          </>
         )}
       </div>
       {error && <p className="text-sm text-danger mt-3">{error}</p>}

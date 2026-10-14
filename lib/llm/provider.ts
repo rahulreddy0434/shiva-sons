@@ -33,28 +33,67 @@ export interface ProposedField {
   column?: unknown
 }
 
-// Waits before the 2nd and 3rd attempts when Gemini is overloaded. A 429 is not
-// retried: on the free tier it usually means the daily quota is gone.
+// Waits before the 2nd and 3rd attempts when a model is overloaded (503).
 const RETRY_DELAYS_MS = [2000, 6000]
 
-async function generateJson(prompt: string): Promise<unknown> {
-  let response
-  for (let attempt = 0; ; attempt++) {
-    try {
-      response = await getClient().models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-        },
-      })
-      break
-    } catch (err) {
-      const transient = (err as { status?: number } | null)?.status === 503
-      if (!transient || attempt >= RETRY_DELAYS_MS.length) throw err
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
+const DEFAULT_MODEL = 'gemini-3.8-flash'
+const DEFAULT_FALLBACKS = 'gemini-3.7-flash,gemini-3.5-flash'
+
+/**
+ * The models to try, in order: GEMINI_MODEL, then GEMINI_FALLBACK_MODELS
+ * (comma-separated; set it to an empty value to use only the first). On the
+ * free tier each model has its own daily quota, so a fallback keeps the app
+ * usable when the first one's quota is spent.
+ */
+export function geminiModels(env: Record<string, string | undefined> = process.env): string[] {
+  const primary = env.GEMINI_MODEL?.trim() || DEFAULT_MODEL
+  const fallbacks = (env.GEMINI_FALLBACK_MODELS ?? DEFAULT_FALLBACKS).split(',').map((m) => m.trim())
+  return [...new Set([primary, ...fallbacks].filter(Boolean))]
+}
+
+const statusOf = (err: unknown) => (err as { status?: number } | null)?.status
+
+/**
+ * Calls each model in turn until one answers. An overloaded model (503) is
+ * retried a couple of times first; a model out of quota (429) or still
+ * overloaded passes to the next. Any other error stops at once, and when
+ * every model fails the last error is thrown.
+ */
+export async function callWithFallback<T>(
+  models: string[],
+  call: (model: string) => Promise<T>,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+): Promise<T> {
+  let lastError: unknown = new Error('Gemini: no model configured')
+  for (const model of models) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await call(model)
+      } catch (err) {
+        lastError = err
+        const status = statusOf(err)
+        if (status === 503 && attempt < RETRY_DELAYS_MS.length) {
+          await sleep(RETRY_DELAYS_MS[attempt])
+          continue
+        }
+        if (status === 429 || status === 503) break
+        throw err
+      }
     }
   }
+  throw lastError
+}
+
+async function generateJson(prompt: string): Promise<unknown> {
+  const response = await callWithFallback(geminiModels(), (model) =>
+    getClient().models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      },
+    })
+  )
 
   const text = response.text
   if (!text) {

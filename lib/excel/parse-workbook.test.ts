@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
-import { parseWorkbook, readSheetColumns } from './parse-workbook'
+import { parseWorkbook, readSheetColumns, readSheetPreview } from './parse-workbook'
 import { buildStarterTemplate, STARTER_COLUMNS } from './starter-template'
 
 async function toBuffer(build: (wb: ExcelJS.Workbook) => void): Promise<Buffer> {
@@ -117,5 +117,33 @@ describe('buildStarterTemplate', () => {
     expect(parsed.sheets).toHaveLength(1)
     expect(parsed.sheets[0].headerRowIndex).toBe(0)
     expect(parsed.sheets[0].columns.map((c) => c.name)).toEqual(STARTER_COLUMNS.map((c) => c.header))
+  })
+})
+
+describe('readSheetPreview', () => {
+  it('shows the first rows of data under the headings and counts them, ignoring formula-only rows', async () => {
+    const buffer = await toBuffer((wb) => {
+      const ws = wb.addWorksheet('Hours')
+      ws.addRow(['Contractor hours'])
+      ws.addRow(['ID', 'NAME', 'TOTAL'])
+      ws.addRow(['1', 'Asha', 8])
+      ws.addRow(['2', 'Ravi', 7.5])
+      ws.addRow(['3', 'Meena', 9])
+      ws.addRow(['4', 'Kiran', 6])
+      ws.addRow([null, null, { formula: 'SUM(C3:C6)' }])
+    })
+    expect(await readSheetPreview(buffer, 'Hours', 2, [0, 1, 2], 2)).toEqual({
+      rows: [
+        ['1', 'Asha', '8'],
+        ['2', 'Ravi', '7.5'],
+      ],
+      filledRows: 4,
+    })
+  })
+
+  it('reports an empty template and a missing worksheet', async () => {
+    const buffer = await toBuffer((wb) => wb.addWorksheet('Blank').addRow(['ID', 'NAME']))
+    expect(await readSheetPreview(buffer, 'Blank', 1, [0, 1])).toEqual({ rows: [], filledRows: 0 })
+    expect(await readSheetPreview(buffer, 'Missing', 1, [0, 1])).toBeNull()
   })
 })

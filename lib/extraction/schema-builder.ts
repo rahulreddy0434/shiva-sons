@@ -3,6 +3,17 @@ import { proposeSchemaFields } from '@/lib/llm/provider'
 import type { WorkbookSheetSummary } from '@/lib/llm/prompts'
 import { guessType } from './guess-type'
 import { isDayOfMonthHeader } from './suggested-instructions'
+import { findSeriesTotals } from '@/lib/validation/cross-checks'
+
+/**
+ * A total that follows a run of number cells holds a number. A text type
+ * would put it into Excel as text, where sums skip it, so it is set here
+ * rather than left to the model.
+ */
+function numericTotals(fields: ExtractionField[]): ExtractionField[] {
+  const totals = new Set(findSeriesTotals(fields).map((pair) => pair.total.key))
+  return fields.map((f) => (totals.has(f.key) ? { ...f, dataType: 'number' } : f))
+}
 
 function toKey(label: string): string {
   return label
@@ -91,5 +102,5 @@ export async function buildFieldsFromInstructions(
     })
   }
 
-  return fields
+  return numericTotals(fields)
 }
