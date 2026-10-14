@@ -7,6 +7,12 @@ the original document, approve, and export.
 The product is under active development — see
 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for what works today.
 
+## Contributors
+
+1. Rahul
+2. Sri
+3. Yogi
+
 ## Setup
 
 1. Install Node.js 20 or newer, then `npm install`.
