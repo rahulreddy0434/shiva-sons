@@ -70,7 +70,8 @@ export function DocumentViewer({
           id="review-document"
           value={documentId}
           onChange={(e) => onNavigate(e.target.value, 1)}
-          className="min-w-0 flex-1 text-sm border border-line rounded-md px-2 py-1 bg-white"
+          // A line of its own on a phone, so the page and zoom buttons cannot squash it
+          className="w-full min-w-0 sm:w-auto sm:flex-1 text-sm border border-line rounded-md px-2 py-1 bg-white"
         >
           {documents.map((d) => {
             const attention = attentionByDocument[d.id] ?? 0

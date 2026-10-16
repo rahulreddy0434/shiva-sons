@@ -5,6 +5,8 @@ import { loadJobExportData, refreshJobStatus } from '@/lib/review/load-job'
 import { approvalBlockers, resolveExportColumns, summarizeRecords } from '@/lib/review/job-summary'
 
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+/** The link is used at once; the export page signs fresh ones for later downloads. */
+const DOWNLOAD_LINK_SECONDS = 60
 
 /**
  * Generates the completed workbook from the job's current approval.
@@ -19,6 +21,12 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  }
+
+  // Row level security hides other people's jobs, so theirs is simply not found
+  const { data: job } = await supabase.from('extraction_jobs').select('id').eq('id', jobId).maybeSingle()
+  if (!job) {
+    return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
 
   const { data: approval } = await supabase
@@ -103,7 +111,13 @@ export async function POST(
 
     await refreshJobStatus(supabase, jobId)
 
+    // So the page can start the download straight away; the list below it signs its own links
+    const { data: signed } = await supabase.storage
+      .from('generated-exports')
+      .createSignedUrl(storagePath, DOWNLOAD_LINK_SECONDS, { download: filename })
+
     return NextResponse.json({
+      downloadUrl: signed?.signedUrl ?? null,
       exportId: exportRow.id,
       rowsWritten: result.rowsWritten,
       firstRow: result.firstRow,

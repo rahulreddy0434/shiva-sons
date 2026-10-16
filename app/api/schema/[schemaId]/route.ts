@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 
 /** A field as sent by the editor. */
@@ -36,7 +37,7 @@ export async function PATCH(
       .from('extraction_schemas')
       .update({ approved: body.approved })
       .eq('id', schemaId)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return serverError(GENERIC_FAILURE, error)
   }
 
   // Replacing the full field list (add/remove/rename/reorder all go through here)
@@ -66,7 +67,7 @@ export async function PATCH(
       .from('extraction_fields')
       .delete()
       .eq('schema_id', schemaId)
-    if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    if (deleteError) return serverError(GENERIC_FAILURE, deleteError)
 
     if (body.fields.length > 0) {
       const { error: insertError } = await supabase.from('extraction_fields').insert(
@@ -81,7 +82,7 @@ export async function PATCH(
           target_column_id: resolveColumn(f),
         }))
       )
-      if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+      if (insertError) return serverError(GENERIC_FAILURE, insertError)
     }
   }
 
@@ -106,7 +107,7 @@ export async function DELETE(
   }
 
   const { error } = await supabase.from('extraction_schemas').delete().eq('id', schemaId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError(GENERIC_FAILURE, error)
 
   return NextResponse.json({ ok: true })
 }

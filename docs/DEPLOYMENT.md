@@ -55,8 +55,11 @@ column. This release adds `storage_size_limits` and `job_check_policy`.
    the repository if asked).
 3. Framework preset: **Next.js** (detected). Leave Root Directory, Build
    Command and Output Directory as they are.
-4. Open **Environment Variables** and add the values below, then press
-   **Deploy**. The first build takes a few minutes.
+4. Open **Environment Variables** and add **all** the values below, then press
+   **Deploy**. The first build takes a few minutes. The site starts and signs
+   people in with only the Supabase values, so a missing Azure or Gemini key
+   shows up only when a document fails at Process. Added or changed a value
+   later? Deployments → ⋯ → **Redeploy**, or it does not take effect.
 
 | Name | Value |
 |------|-------|
@@ -97,12 +100,26 @@ In Supabase → **Authentication → URL Configuration**:
   (keep `http://localhost:3000/**` so local development still works)
 
 Sign-up confirmation and password-reset emails use these, so without this
-step their links point at the wrong place.
+step their links point at the wrong place. (On 2026-10-16 reset links still
+went to a Vercel login page for a `…vercel.app` deployment address: this step
+had not been done.)
 
 **Emails.** Supabase's built-in email sender allows only a few messages an
-hour and is meant for testing. Before customers sign up, add your own sender
-under Authentication → Emails → SMTP Settings (for example Resend, Postmark or
-your email provider's SMTP details).
+hour and is meant for testing; on the live site sign-up and password reset
+were refused with "email rate limit exceeded". Before customers sign up, add
+your own sender. With Resend's free plan (100 emails a day):
+
+1. resend.com → sign up → **Domains → Add domain**, and add the DNS records it
+   shows at your domain registrar. Resend only sends to other people's
+   addresses from a domain you own, so this needs your own domain (step 5).
+2. Resend → **API Keys → Create API key** (sending access).
+3. Supabase → **Authentication → Emails → SMTP Settings → Enable custom SMTP**:
+   host `smtp.resend.com`, port `465`, username `resend`, password = the API
+   key, sender email e.g. `no-reply@<your domain>`, sender name `Shiva Sons`.
+4. Supabase → **Authentication → Rate Limits**: raise "emails per hour" (for
+   example to 30).
+5. Sign up with a real address of your own and check the email arrives and its
+   link opens the live site.
 
 ## 4. Check the live site
 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { refreshJobStatus } from '@/lib/review/load-job'
 
@@ -41,7 +42,7 @@ export async function DELETE(
     .delete()
     .eq('id', documentId)
     .select('id')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError(GENERIC_FAILURE, error)
   if (!deleted || deleted.length === 0) {
     return NextResponse.json({ error: 'Could not delete the document' }, { status: 500 })
   }

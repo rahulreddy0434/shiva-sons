@@ -27,8 +27,9 @@ export async function POST(request: Request) {
     .select('id, storage_path')
     .eq('id', documentId)
     .single()
+  // Someone else's document looks exactly like one that does not exist
   if (docError || !doc) {
-    return NextResponse.json({ error: docError?.message ?? 'Document not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Document not found' }, { status: 404 })
   }
 
   const limited = await checkRateLimit(supabase, user.id, 'ocr')

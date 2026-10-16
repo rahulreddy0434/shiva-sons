@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { buildFieldsFromColumns, buildFieldsFromInstructions } from '@/lib/extraction/schema-builder'
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
     .from('extraction_instructions')
     .insert({ job_id: jobId, user_id: user.id, instructions_text: instructions })
   if (instrError) {
-    return NextResponse.json({ error: instrError.message }, { status: 500 })
+    return serverError(GENERIC_FAILURE, instrError)
   }
 
   const { data: schema, error: schemaError } = await supabase
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
     .select()
     .single()
   if (schemaError || !schema) {
-    return NextResponse.json({ error: schemaError?.message ?? 'Could not create schema' }, { status: 500 })
+    return serverError('Could not create schema', schemaError)
   }
 
   const { error: fieldsError } = await supabase.from('extraction_fields').insert(
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
     }))
   )
   if (fieldsError) {
-    return NextResponse.json({ error: fieldsError.message }, { status: 500 })
+    return serverError(GENERIC_FAILURE, fieldsError)
   }
 
   return NextResponse.json({ schemaId: schema.id })

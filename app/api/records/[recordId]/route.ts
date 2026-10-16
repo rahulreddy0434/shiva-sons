@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { validateRecord, type FieldValue } from '@/lib/validation/validate-record'
 import { refreshJobStatus } from '@/lib/review/load-job'
@@ -88,7 +89,7 @@ export async function PATCH(
           .from('extracted_fields')
           .update({ value: newValue, status: 'user_corrected' })
           .eq('id', row.id)
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+        if (error) return serverError(GENERIC_FAILURE, error)
       } else {
         // The AI returned nothing for this field, so there is no row yet
         const { data: inserted, error } = await supabase
@@ -104,7 +105,7 @@ export async function PATCH(
           .select('id')
           .single()
         if (error || !inserted) {
-          return NextResponse.json({ error: error?.message ?? 'Could not save the value' }, { status: 500 })
+          return serverError('Could not save the value', error)
         }
         fieldId = inserted.id
       }
@@ -115,7 +116,7 @@ export async function PATCH(
         previous_value: previousValue,
         new_value: newValue,
       })
-      if (correctionError) return NextResponse.json({ error: correctionError.message }, { status: 500 })
+      if (correctionError) return serverError(GENERIC_FAILURE, correctionError)
 
       current[edit.key] = { value: newValue, status: 'user_corrected', confidence: row?.confidence ?? null }
       changed++
@@ -147,7 +148,7 @@ export async function PATCH(
 
   if (Object.keys(recordUpdate).length > 0) {
     const { error } = await supabase.from('extraction_records').update(recordUpdate).eq('id', recordId)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return serverError(GENERIC_FAILURE, error)
   }
 
   // Data changed after sign-off: the job must be approved again before export
@@ -179,7 +180,7 @@ export async function DELETE(
     .delete()
     .eq('id', recordId)
     .select('id, job_id')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return serverError(GENERIC_FAILURE, error)
   if (!deleted || deleted.length === 0) {
     return NextResponse.json({ error: 'Record not found' }, { status: 404 })
   }

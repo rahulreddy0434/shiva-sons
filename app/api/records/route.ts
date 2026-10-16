@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { refreshJobStatus } from '@/lib/review/load-job'
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     .select('id')
     .single()
   if (error || !record) {
-    return NextResponse.json({ error: error?.message ?? 'Could not add a record' }, { status: 500 })
+    return serverError('Could not add a record', error)
   }
 
   await supabase

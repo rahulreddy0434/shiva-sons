@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
+import { serverError } from '@/lib/api-error'
 import { PDFDocument } from 'pdf-lib'
 import { createClient } from '@/lib/supabase/server'
 import { refreshJobStatus } from '@/lib/review/load-job'
 import { checkDocument } from '@/lib/documents/validate-upload'
+import { findIdenticalDocument } from '@/lib/documents/identical-file'
 
 // Reads back or removes files in storage, which can take longer than the default
 export const maxDuration = 60
@@ -71,6 +73,33 @@ export async function POST(request: Request) {
     }
   }
 
+  // The same file twice in a job would put the same cards into Excel twice
+  const { data: sameSized } = await supabase
+    .from('uploaded_documents')
+    .select('original_filename, storage_path')
+    .eq('job_id', jobId)
+    .eq('file_size', buffer.length)
+  const identical = await findIdenticalDocument(
+    buffer,
+    (sameSized ?? []).map((d) => ({ name: d.original_filename, path: d.storage_path })),
+    async (storedPath) => {
+      const { data } = await supabase.storage.from('source-documents').download(storedPath)
+      return data ? Buffer.from(await data.arrayBuffer()) : null
+    }
+  )
+  if (identical) {
+    await discard()
+    return NextResponse.json(
+      {
+        error:
+          identical.name === fileName
+            ? `${fileName} is already in this job, so it was not added again.`
+            : `${fileName} is the same file as ${identical.name}, which is already in this job, so it was not added again.`,
+      },
+      { status: 409 }
+    )
+  }
+
   const { data: document, error: insertError } = await supabase
     .from('uploaded_documents')
     .insert({
@@ -88,7 +117,7 @@ export async function POST(request: Request) {
   if (insertError || !document) {
     // Don't leave a file behind that nothing points to
     await discard()
-    return NextResponse.json({ error: insertError?.message ?? 'Could not save document record' }, { status: 500 })
+    return serverError('Could not save document record', insertError)
   }
 
   await refreshJobStatus(supabase, jobId)

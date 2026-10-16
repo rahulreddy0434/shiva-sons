@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { friendlyAuthError } from '@/lib/auth-errors'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
@@ -21,7 +22,7 @@ export default function SignInPage() {
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
-    if (error) { setError(error.message); return }
+    if (error) { setError(friendlyAuthError(error.message)); return }
     router.push('/dashboard')
     router.refresh()
   }

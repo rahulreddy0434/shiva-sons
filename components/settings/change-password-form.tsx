@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { friendlyAuthError } from '@/lib/auth-errors'
 import { createClient } from '@/lib/supabase/client'
 
 const MIN_LENGTH = 8
@@ -27,7 +28,7 @@ export function ChangePasswordForm() {
     setSaving(false)
 
     if (error) {
-      setError(error.message)
+      setError(friendlyAuthError(error.message))
       return
     }
     setPassword('')
