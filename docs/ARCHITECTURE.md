@@ -54,6 +54,16 @@ The service-role key bypasses all of this. It must never be imported into
 client code. One route uses it: account deletion, after the caller has been
 identified with their normal session, and only on their own user id.
 
+Every response carries the headers in `lib/security-headers.ts` (set from
+`next.config.ts`): a content policy that allows only this site, the project's
+Supabase origin and WebAssembly (the PDF viewer's scan decoders), no framing
+by other sites, `nosniff`, and referrer and permissions policies. A new
+outside service the pages call must be added there or the browser blocks it.
+
+Errors a route cannot word better go through `serverError` (`lib/api-error.ts`):
+the user sees a plain sentence, the database's message goes to the server log.
+Sign-in errors from Supabase are reworded by `lib/auth-errors.ts`.
+
 ## Data model
 
 ```
@@ -96,7 +106,8 @@ Uploads go straight from the browser to Supabase Storage: `/api/documents/upload
 checks the job and the size and returns a one-time link to a new path in the
 user's own folder; the browser sends the file there; `/api/documents/register`
 reads the stored bytes back, checks the real type, size and that a PDF opens,
-then records the document — or deletes the file. No document passes through a
+and that the job does not already hold the same bytes (`lib/documents/identical-file.ts`,
+comparing only same-sized files), then records the document — or deletes the file. No document passes through a
 Vercel function, so its ~4.5 MB request limit does not apply. Limits: 20 MB per
 file, 100 MB per upload (`lib/documents/validate-upload.ts`), with the bucket
 enforcing the per-file limit too. Excel templates (at most 4 MB) still go through
@@ -153,6 +164,13 @@ Each job has check settings (`extraction_jobs.check_policy`, null = defaults in
 break, rounding, and the tolerance for totals. They only decide what is
 flagged. The Review screen and approval pass the same settings to
 `validateRecords`, so approval never disagrees with what the reviewer saw.
+
+Possible duplicates are warnings, never removed automatically: records with
+exactly the same values, or the same identifying values. Identifying means
+the required fields, or, when the user marked none (the usual case with
+"Use my template's columns"), fields named like an identifier (ID, Name,
+Employee Number) plus any period field (Week Ending, Month, Date), so the same
+person's different weeks are not flagged (`identifyingFields`).
 
 Known gap, tracked in the implementation plan: Azure's word confidence is discarded.
 

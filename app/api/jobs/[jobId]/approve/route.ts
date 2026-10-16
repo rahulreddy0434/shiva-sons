@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { loadJobExportData, refreshJobStatus } from '@/lib/review/load-job'
 import { approvalBlockers, resolveExportColumns, summarizeRecords } from '@/lib/review/job-summary'
@@ -52,7 +53,7 @@ export async function POST(
     .update({ superseded_at: now })
     .eq('job_id', jobId)
     .is('superseded_at', null)
-  if (supersedeError) return NextResponse.json({ error: supersedeError.message }, { status: 500 })
+  if (supersedeError) return serverError(GENERIC_FAILURE, supersedeError)
 
   const { data: approval, error } = await supabase
     .from('job_approvals')
@@ -73,7 +74,7 @@ export async function POST(
     .select('id')
     .single()
   if (error || !approval) {
-    return NextResponse.json({ error: error?.message ?? 'Could not save the approval' }, { status: 500 })
+    return serverError('Could not save the approval', error)
   }
 
   await supabase.from('extraction_jobs').update({ target_sheet_id: sheet.id }).eq('id', jobId)

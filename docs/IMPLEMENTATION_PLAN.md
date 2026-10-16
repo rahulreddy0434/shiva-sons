@@ -80,6 +80,8 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Corrections saved with the AI's original kept; add and remove records
 - ✅ Field checks: missing required, date / time / number / duration formats, uncertain values
 - ✅ Record and job checks: day cells against their total, possible duplicates
+  (exact copies always; otherwise the required fields, or, when none are required,
+  fields named like an identifier plus any period field such as Week Ending)
 - ✅ Filters, mark reviewed, compact grid for day columns
 - ✅ Stacks vertically on a phone (checked at 390 px)
 - ✅ Start / end / break / total checks for clock-in style cards: overnight shifts,
@@ -117,7 +119,14 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Signing out returns to the website; sign-in pages and the app link back to it
 - ✅ Account deletion from Settings (files, then the sign-in, which cascades)
 - ⬜ Accuracy measured on a set of real timecards
-- ✅ Deployment checklist written (`docs/DEPLOYMENT.md`); none of it carried out yet
+- ✅ Deployment checklist written (`docs/DEPLOYMENT.md`)
+- 🟡 Deployed to https://shiva-sons.vercel.app (2026-10-16). Still to do in the
+  dashboards: Supabase sign-in URLs point at the live site, and an email sender
+- ✅ Security headers: content policy, no framing, nosniff, referrer and
+  permissions policies (`lib/security-headers.ts`); Next.js 16.3.8 security release
+- ✅ The same file uploaded twice into a job is refused; template titles merged
+  across columns are no longer taken for the heading row; the Excel file
+  downloads as soon as it is generated; plain wording for sign-in and server errors
 - ⬜ Legal review of the privacy and terms drafts
 
 ## Phase 8 — Later
@@ -167,6 +176,12 @@ panel on flagged fields, Better Auth if still wanted.
 | 2026-10-14 | Unit tests, typecheck, lint, production build, browser tests (isolation now covers the upload-link and register routes) | `npm test` (191), `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:e2e` (3) | Pass |
 | 2026-10-14 | Saving per-job check settings | Browser after the migration: limit set to 8.5 h, then back to standard | Pass: the 9-hour day flagged, then not; an out-of-range value refused with a message |
 | 2026-10-14 | Bucket size limits | Read back from `storage.buckets` | Pass: 20 MB on source-documents |
+| 2026-10-16 | Live site end to end, first deploy | Browser on shiva-sons.vercel.app, 7 made-up cards (typed, computer-handwriting fonts, tilted phone photo, fax-style cursive, sideways page) + the owner's demo card | Found: every document failed at Process — the Azure and Gemini keys were missing in Vercel. After the owner added them: pass |
+| 2026-10-16 | Extraction accuracy on the made-up cards | Answer key per card; live Azure + Gemini | 280 of 280 values right on 8 monthly cards, 11 of 11 on a weekly in/out card (date read as a date). Fonts are easier than real pens — real-card accuracy still **not measured** |
+| 2026-10-16 | New customer on the live site | Sign-up form, then an account made confirmed by the service role, AI fields, 5 documents, review, remove a duplicate, approve, export, delete account | Sign-up and password reset refused with "email rate limit exceeded" (Supabase's built-in sender); reset links go to a Vercel login page (Supabase URL settings). Everything else: pass; deletion leaves no rows or files |
+| 2026-10-16 | Break-it checks on the live site | Second account against the first's pages, 9 API routes, storage and tables; bad, empty, oversize and renamed files; script and SQL in a job name; skipped steps | Pass: nothing reached; every bad file refused with a reason. Found and fixed: missing security headers, a raw database message, a 409 instead of 404 |
+| 2026-10-16 | Fixes from the live test | Unit tests; local production build against the real services | Pass: headers present, no policy violations, the demo scan draws in full under the policy, phone picker 324 px wide, merged title skipped (headings on row 3), the same card twice refused, the Excel file downloads by itself, wrong password worded plainly |
+| 2026-10-16 | Unit tests, typecheck, lint, production build, browser tests | `npm test` (204), `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:e2e` (3) | Pass |
 | — | Source highlighting on handwritten or photographed cards | Only typed PDFs tried | **Not yet verified** |
 | 2026-10-13 | Two-page handwritten time card against a 36-column day template | Live Azure + Gemini as a test account; test data deleted afterwards | One record, day cells added up to the card total; the handwritten name was misread without being flagged |
 | 2026-10-13 | Failed extraction shows its reason and can be retried | Gemini was busy on the first attempt | Pass |

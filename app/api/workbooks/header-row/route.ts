@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { MAX_HEADER_ROW, readSheetColumns } from '@/lib/excel/parse-workbook'
 
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
     : { data: [] }
 
   const { error: deleteError } = await supabase.from('workbook_columns').delete().eq('sheet_id', sheetId)
-  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  if (deleteError) return serverError(GENERIC_FAILURE, deleteError)
 
   const { data: inserted, error: insertError } = await supabase
     .from('workbook_columns')
@@ -74,13 +75,13 @@ export async function POST(request: Request) {
       }))
     )
     .select('id, column_name')
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+  if (insertError) return serverError(GENERIC_FAILURE, insertError)
 
   const { error: sheetError } = await supabase
     .from('workbook_sheets')
     .update({ header_row_index: headerRow - 1 })
     .eq('id', sheetId)
-  if (sheetError) return NextResponse.json({ error: sheetError.message }, { status: 500 })
+  if (sheetError) return serverError(GENERIC_FAILURE, sheetError)
 
   // Re-link fields to the column that now carries the same heading
   const newIdByName = new Map<string, string>()

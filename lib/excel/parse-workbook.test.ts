@@ -42,6 +42,21 @@ describe('parseWorkbook', () => {
     expect(parsed.sheets[0].columns.map((c) => c.name)).toEqual(['ID', 'NAME', 'Company', 'TRADE', 'HOURS'])
   })
 
+  it('skips a title merged across the columns above the header', async () => {
+    const parsed = await parseWorkbook(
+      await toBuffer((wb) => {
+        const ws = wb.addWorksheet('Data')
+        ws.addRow(['Payroll export', '', ''])
+        ws.mergeCells('A1:C1')
+        ws.addRow([])
+        ws.addRow(['Name', 'Week Ending', 'Hours'])
+        ws.addRow(['Asha', '2026-10-09', 40])
+      })
+    )
+    expect(parsed.sheets[0].headerRowIndex).toBe(2)
+    expect(parsed.sheets[0].columns.map((c) => c.name)).toEqual(['Name', 'Week Ending', 'Hours'])
+  })
+
   it('reads numeric day headers as text names and keeps their positions', async () => {
     const parsed = await parseWorkbook(
       await toBuffer((wb) => {

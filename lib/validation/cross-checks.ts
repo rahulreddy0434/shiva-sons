@@ -91,19 +91,64 @@ function dayLimit(fields: ExtractionField[], record: CheckableRecord, policy: Ch
   return issues
 }
 
+/** A label naming who a record is about: "ID", "Employee Number", "Name", "Emp #". */
+const IDENTITY_LABEL = /\b(id|name|employee|emp|staff|worker|badge|number|no)\b|#/i
+/** A label naming the period a record covers: "Week Ending", "Month", "Pay date". */
+const PERIOD_LABEL = /week|month|period|ending|date/i
+/** Fewer filled values than this and two records matching says nothing. */
+const MIN_VALUES_FOR_COPY = 3
+
 /**
- * Finds records that share every identifying (required) value — usually the
- * same card uploaded twice. Records with any identifying value missing are
- * left out: that is already a blocking issue of its own.
+ * The fields that tell one record from another: the required ones when the
+ * user marked any, otherwise the ones whose names read like an identifier,
+ * together with any period field (so the same person's different weeks differ).
+ */
+export function identifyingFields(fields: ExtractionField[]): ExtractionField[] {
+  const required = fields.filter((f) => f.required)
+  if (required.length > 0) return required
+
+  const singles = groupFields(fields).flatMap((g) => (g.kind === 'single' ? [g.field] : []))
+  const who = singles.filter((f) => IDENTITY_LABEL.test(f.label))
+  if (who.length === 0) return []
+  return [...who, ...singles.filter((f) => !who.includes(f) && PERIOD_LABEL.test(f.label))]
+}
+
+const normalized = (value: FieldValue | undefined) => (value?.value ?? '').trim().toLowerCase()
+
+/**
+ * Finds records that look like the same card twice: every value identical, or
+ * every identifying value the same. Records with an identifying value missing
+ * are left out of the second test: that is already an issue of its own.
  */
 function duplicates(fields: ExtractionField[], records: CheckableRecord[]): Map<string, FieldIssue> {
-  const identifying = fields.filter((f) => f.required)
   const found = new Map<string, FieldIssue>()
-  if (identifying.length === 0) return found
+  const identifying = identifyingFields(fields)
 
+  // Exact copies, whatever the fields are called
+  const byContent = new Map<string, string[]>()
+  for (const record of records) {
+    const parts = fields.map((f) => normalized(record.values[f.key]))
+    if (parts.filter((p) => p !== '').length < MIN_VALUES_FOR_COPY) continue
+    const content = JSON.stringify(parts)
+    byContent.set(content, [...(byContent.get(content) ?? []), record.id])
+  }
+  const anchor = identifying[0] ?? fields[0]
+  for (const ids of byContent.values()) {
+    if (ids.length < 2) continue
+    for (const id of ids) {
+      found.set(id, {
+        fieldKey: anchor.key,
+        type: 'duplicate',
+        severity: 'warning',
+        message: `${ids.length - 1} other record${ids.length === 2 ? ' has' : 's have'} exactly the same values. The same card was probably uploaded twice; remove the extra copy.`,
+      })
+    }
+  }
+
+  if (identifying.length === 0) return found
   const byIdentity = new Map<string, string[]>()
   for (const record of records) {
-    const parts = identifying.map((f) => (record.values[f.key]?.value ?? '').trim().toLowerCase())
+    const parts = identifying.map((f) => normalized(record.values[f.key]))
     if (parts.some((p) => p === '')) continue
     const identity = JSON.stringify(parts)
     byIdentity.set(identity, [...(byIdentity.get(identity) ?? []), record.id])
@@ -113,6 +158,8 @@ function duplicates(fields: ExtractionField[], records: CheckableRecord[]): Map<
   for (const ids of byIdentity.values()) {
     if (ids.length < 2) continue
     for (const id of ids) {
+      // An exact copy keeps its plainer message
+      if (found.has(id)) continue
       found.set(id, {
         fieldKey: identifying[0].key,
         type: 'duplicate',

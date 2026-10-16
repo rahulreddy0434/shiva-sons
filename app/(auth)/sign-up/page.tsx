@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { friendlyAuthError } from '@/lib/auth-errors'
 import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -27,7 +28,7 @@ export default function SignUpPage() {
     const supabase = createClient()
     const { error } = await supabase.auth.signUp({ email, password })
     setLoading(false)
-    if (error) { setError(error.message); return }
+    if (error) { setError(friendlyAuthError(error.message)); return }
     setMessage('Check your email to confirm your account, then sign in.')
   }
 

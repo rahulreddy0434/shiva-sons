@@ -34,6 +34,8 @@ function cellText(cell: ExcelJS.Cell): string {
 function filledCellCount(row: ExcelJS.Row): number {
   let count = 0
   row.eachCell({ includeEmpty: false }, (cell) => {
+    // A title merged across the sheet repeats in every cell it covers; count it once
+    if (cell.isMerged && cell.master !== cell) return
     if (cellText(cell)) count++
   })
   return count

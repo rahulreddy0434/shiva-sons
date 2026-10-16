@@ -76,6 +76,8 @@ export function ApprovalPanel({
         return
       }
       if (action === 'export') {
+        // Start the download; the file also stays in the list below
+        if (result.downloadUrl) window.location.assign(result.downloadUrl)
         setExportNote(
           `${result.rowsWritten} record${result.rowsWritten === 1 ? '' : 's'} written starting at row ${result.firstRow}.` +
             (result.formulaCellsKept > 0

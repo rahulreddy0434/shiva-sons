@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { friendlyAuthError } from '@/lib/auth-errors'
 import { createClient } from '@/lib/supabase/client'
 
 export default function ResetPasswordPage() {
@@ -24,7 +25,7 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
-    if (error) { setError(error.message); return }
+    if (error) { setError(friendlyAuthError(error.message)); return }
     setMessage('Check your email for a reset link.')
   }
 
@@ -32,7 +33,7 @@ export default function ResetPasswordPage() {
     e.preventDefault()
     setError(null)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
-    if (error) { setError(error.message); return }
+    if (error) { setError(friendlyAuthError(error.message)); return }
     setMessage('Password updated — you can sign in now.')
   }
 

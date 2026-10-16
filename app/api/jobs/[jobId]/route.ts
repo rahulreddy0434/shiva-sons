@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { removeAllUnder } from '@/lib/storage/list-paths'
 
@@ -38,7 +39,7 @@ export async function DELETE(
     .eq('id', jobId)
     .select('id')
   if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    return serverError(GENERIC_FAILURE, deleteError)
   }
   if (!deleted || deleted.length === 0) {
     return NextResponse.json({ error: 'Could not delete the job' }, { status: 500 })
