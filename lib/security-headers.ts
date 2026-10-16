@@ -8,18 +8,21 @@
  * scan decoders. Inline scripts are allowed because Next.js needs them without
  * a nonce (see the Next.js content-security-policy guide, "Without Nonces").
  */
-export function securityHeaders({ supabaseUrl, isDev }: { supabaseUrl: string; isDev: boolean }) {
-  const supabase = new URL(supabaseUrl).origin
-  const supabaseSocket = supabase.replace(/^http/, 'ws')
+export function securityHeaders({ supabaseUrl, isDev }: { supabaseUrl: string | undefined; isDev: boolean }) {
+  // A build without the Supabase address (say, a Vercel environment missing its
+  // variables) still builds; the pages then simply cannot reach Supabase
+  const supabase = parseOrigin(supabaseUrl)
+  if (!supabase) console.warn('NEXT_PUBLIC_SUPABASE_URL is not set, so the content policy allows no Supabase address.')
+  const supabaseSources = supabase ? ` ${supabase} ${supabase.replace(/^http/, 'ws')}` : ''
 
   const policy = [
     "default-src 'self'",
     // React needs eval only in development, for its error overlay
     `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${supabase}`,
+    `img-src 'self' data: blob:${supabase ? ` ${supabase}` : ''}`,
     "font-src 'self' data:",
-    `connect-src 'self' ${supabase} ${supabaseSocket}`,
+    `connect-src 'self'${supabaseSources}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -36,4 +39,12 @@ export function securityHeaders({ supabaseUrl, isDev }: { supabaseUrl: string; i
     { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
     { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()' },
   ]
+}
+
+function parseOrigin(url: string | undefined): string | null {
+  try {
+    return url ? new URL(url).origin : null
+  } catch {
+    return null
+  }
 }

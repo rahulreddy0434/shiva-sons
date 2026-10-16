@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: securityHeaders({
-          supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
           isDev: process.env.NODE_ENV === "development",
         }),
       },
