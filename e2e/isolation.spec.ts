@@ -60,8 +60,9 @@ test('a second account cannot see, change or delete the first account’s job', 
   await expect(page.getByText('uploaded — drag a different file')).toBeVisible()
   await page.getByRole('link', { name: 'Next →' }).click()
   await page.getByRole('button', { name: 'Use my template’s columns' }).click()
-  await page.getByRole('button', { name: 'Approve schema' }).click()
-  await expect(page.getByRole('button', { name: 'Approved ✓' })).toBeVisible()
+  await page.getByRole('button', { name: 'Make the rest Optional' }).click()
+  await page.getByRole('button', { name: 'Approve fields' }).click()
+  await expect(page.getByRole('button', { name: 'Fields approved ✓' })).toBeVisible()
   await page.getByRole('link', { name: 'Next →' }).click()
   await page.locator('input[type=file]').setInputFiles({
     name: 'card.png',
@@ -72,7 +73,7 @@ test('a second account cannot see, change or delete the first account’s job', 
   await expect(page.getByText('✓ Uploaded')).toBeVisible()
   await page.getByRole('button', { name: /Process 1 document/ }).click()
   await page.getByRole('button', { name: /Extract data from 1 document/ }).click()
-  await expect(page.getByText('1 of 1 document processed')).toBeVisible()
+  await expect(page.getByText('1 of 1 extracted · 1 of 1 pages read')).toBeVisible()
 
   // What A owns, read with A's own direct client
   const ownerDb = await directClient(owner)
@@ -103,6 +104,8 @@ test('a second account cannot see, change or delete the first account’s job', 
     ['approve job', api.post(`/api/jobs/${jobId}/approve`, { data: { sheetId: 'x' } })],
     ['export job', api.post(`/api/jobs/${jobId}/export`, { data: {} })],
     ['delete document', api.delete(`/api/documents/${documentId}`)],
+    ['read a page of a document', api.get(`/api/documents/${documentId}/pages/1`)],
+    ['choose the worksheet', api.patch(`/api/jobs/${jobId}`, { data: { targetSheetId: '00000000-0000-0000-0000-000000000000' } })],
     ['edit record', api.patch(`/api/records/${recordId}`, { data: { fields: [{ key: 'employee_name', value: 'hacked' }] } })],
     ['delete record', api.delete(`/api/records/${recordId}`)],
     ['re-run OCR', api.post('/api/extraction/process', { data: { documentId } })],

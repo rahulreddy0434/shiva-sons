@@ -3,6 +3,7 @@ import { requireStep } from '@/lib/extraction/job-progress'
 import { InstructionsForm } from '@/components/extraction/instructions-form'
 import { SchemaEditor } from '@/components/extraction/schema-editor'
 import { buildSuggestedInstructions } from '@/lib/extraction/suggested-instructions'
+import { chosenSheetId } from '@/lib/excel/sheet-choice'
 
 export default async function InstructionsStepPage({
   params,
@@ -32,21 +33,25 @@ export default async function InstructionsStepPage({
   const { data: sheets } = workbookFile
     ? await supabase
         .from('workbook_sheets')
-        .select('sheet_name, sheet_index, workbook_columns(id, column_name, column_index)')
+        .select('id, sheet_name, sheet_index, workbook_columns(id, column_name, column_index)')
         .eq('workbook_file_id', workbookFile.id)
         .order('sheet_index', { ascending: true })
     : { data: [] }
 
-  const orderedSheets = (sheets ?? []).map((s) => ({
-    name: s.sheet_name,
-    columns: [...s.workbook_columns].sort((a, b) => a.column_index - b.column_index),
-  }))
-  const severalSheets = orderedSheets.filter((s) => s.columns.length > 0).length > 1
-
-  // Every template column, named with its worksheet when there is more than one
-  const columnOptions = orderedSheets.flatMap((s) =>
-    s.columns.map((c) => ({ id: c.id, label: severalSheets ? `${s.name}: ${c.column_name}` : c.column_name }))
+  // Only the worksheet chosen in Step 1 is filled, so only its columns are offered
+  const { data: job } = await supabase.from('extraction_jobs').select('target_sheet_id').eq('id', jobId).maybeSingle()
+  const targetId = chosenSheetId(
+    (sheets ?? []).map((s) => ({ id: s.id, columnCount: s.workbook_columns.length })),
+    job?.target_sheet_id
   )
+  const orderedSheets = (sheets ?? [])
+    .filter((s) => s.id === targetId)
+    .map((s) => ({
+      name: s.sheet_name,
+      columns: [...s.workbook_columns].sort((a, b) => a.column_index - b.column_index),
+    }))
+
+  const columnOptions = orderedSheets.flatMap((s) => s.columns.map((c) => ({ id: c.id, label: c.column_name })))
 
   const suggestedInstructions = schema
     ? ''

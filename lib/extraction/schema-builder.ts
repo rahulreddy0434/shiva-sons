@@ -35,7 +35,7 @@ const TYPE_FROM_SAMPLE: Record<string, ExtractionField['dataType']> = {
  * column, without any AI: for when the user just wants their columns filled,
  * or the AI service is unavailable. Types come from the column's sample data
  * where the template has some, otherwise from its name; day-of-month columns
- * are numbers. Nothing is marked required — that is the user's call.
+ * are numbers. Required or Optional is left for the user to choose in Step 2.
  */
 export function buildFieldsFromColumns(sheets: WorkbookSheetSummary[]): ExtractionField[] {
   // One worksheet only: the first that has headings
@@ -54,7 +54,7 @@ export function buildFieldsFromColumns(sheets: WorkbookSheetSummary[]): Extracti
       key,
       label: column.name,
       dataType: day ? 'number' : (TYPE_FROM_SAMPLE[column.inferredType] ?? guessType(column.name)),
-      required: false,
+      required: null,
       sortOrder: index,
       targetColumn: column.name,
     }
@@ -96,7 +96,8 @@ export async function buildFieldsFromInstructions(
       dataType: DATA_TYPES.includes(p.dataType as ExtractionField['dataType'])
         ? (p.dataType as ExtractionField['dataType'])
         : guessType(label),
-      required: p.required === true,
+      // The user chooses Required or Optional in Step 2; the AI's opinion is not a choice
+      required: null,
       sortOrder: fields.length,
       targetColumn: typeof p.column === 'string' && columnNames.has(p.column) ? p.column : null,
     })

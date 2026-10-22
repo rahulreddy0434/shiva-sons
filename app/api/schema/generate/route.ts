@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
+import { chosenSheetId } from '@/lib/excel/sheet-choice'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { buildFieldsFromColumns, buildFieldsFromInstructions } from '@/lib/extraction/schema-builder'
 import { describeLlmError } from '@/lib/llm/errors'
@@ -38,11 +39,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: limited }, { status: 429 })
   }
 
-  const { data: sheetRows } = await supabase
+  const { data: allSheetRows } = await supabase
     .from('workbook_sheets')
-    .select('sheet_name, sheet_index, workbook_columns(id, column_name, column_index, inferred_type)')
+    .select('id, sheet_name, sheet_index, workbook_columns(id, column_name, column_index, inferred_type)')
     .eq('workbook_file_id', workbookFile.id)
     .order('sheet_index', { ascending: true })
+
+  // Only the worksheet chosen in Step 1 is filled, so fields come from its columns alone
+  const { data: job } = await supabase.from('extraction_jobs').select('target_sheet_id').eq('id', jobId).maybeSingle()
+  const targetId = chosenSheetId(
+    (allSheetRows ?? []).map((s) => ({ id: s.id, columnCount: s.workbook_columns.length })),
+    job?.target_sheet_id
+  )
+  const sheetRows = (allSheetRows ?? []).filter((s) => s.id === targetId)
 
   // Field → template column, by header. The first sheet that has the header wins.
   const columnIdByName = new Map<string, string>()

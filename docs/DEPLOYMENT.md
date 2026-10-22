@@ -46,7 +46,8 @@ supabase migration list --linked
 ```
 
 Every migration in `supabase/migrations/` must show a time in the Remote
-column. This release adds `storage_size_limits` and `job_check_policy`.
+column. The latest release adds `field_required_choice` (a field's Required /
+Optional is now a choice the user must make; existing fields keep theirs).
 
 ## 2. Create the Vercel project
 

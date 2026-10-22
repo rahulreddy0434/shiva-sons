@@ -3,7 +3,8 @@ export interface ExtractionField {
   key: string
   label: string
   dataType: 'string' | 'date' | 'time' | 'duration' | 'number'
-  required: boolean
+  /** Required or Optional, as the user chose in Step 2; null until they choose. */
+  required: boolean | null
   sortOrder: number
   /** Header of the template column this field fills, when known. */
   targetColumn?: string | null

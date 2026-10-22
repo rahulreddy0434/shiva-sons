@@ -165,6 +165,21 @@ break, rounding, and the tolerance for totals. They only decide what is
 flagged. The Review screen and approval pass the same settings to
 `validateRecords`, so approval never disagrees with what the reviewer saw.
 
+A field's `required` is the user's choice: `null` until they pick Required or
+Optional in Step 2, and the schema route refuses approval while any field is
+`null` (`lib/extraction/required-choice.ts`). Neither the template columns nor
+the AI decide it; ID- and name-like fields are only suggested. Checks treat
+`null` as optional.
+
+A template with several worksheets fills one of them: `extraction_jobs.target_sheet_id`,
+chosen in Step 1 (`PATCH /api/jobs/[jobId]`), defaulting to the sheet with the
+most headings (`lib/excel/sheet-choice.ts`). Field generation, the suggested
+description and Step 2's column choices use only that sheet.
+
+The Documents step loads only page numbers and record counts; one page's read
+text and values come from `GET /api/documents/[id]/pages/[n]` when the user
+opens it, so a long document stays quick.
+
 Possible duplicates are warnings, never removed automatically: records with
 exactly the same values, or the same identifying values. Identifying means
 the required fields, or, when the user marked none (the usual case with

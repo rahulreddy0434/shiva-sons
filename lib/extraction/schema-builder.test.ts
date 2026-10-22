@@ -19,7 +19,8 @@ describe('buildFieldsFromColumns', () => {
     expect(fields.map((f) => f.dataType)).toEqual(['string', 'date', 'time', 'duration', 'number'])
     expect(fields.map((f) => f.sortOrder)).toEqual([0, 1, 2, 3, 4])
     expect(fields.map((f) => f.targetColumn)).toEqual(['Employee Name', 'Date', 'Start Time', 'Break Duration', 'Total Hours'])
-    expect(fields.every((f) => f.required === false)).toBe(true)
+    // Required or Optional is the user's choice in Step 2
+    expect(fields.every((f) => f.required === null)).toBe(true)
   })
 
   it('does not treat overtime as a clock time, or an ID as a number', () => {
@@ -77,8 +78,8 @@ describe('buildFieldsFromInstructions', () => {
     ])
 
     expect(await buildFieldsFromInstructions('x', [])).toEqual([
-      { key: 'employee_name', label: 'Employee Name', dataType: 'string', required: true, sortOrder: 0, targetColumn: null },
-      { key: 'daily_attendance', label: 'Daily attendance (days 1–31)', dataType: 'string', required: false, sortOrder: 1, targetColumn: null },
+      { key: 'employee_name', label: 'Employee Name', dataType: 'string', required: null, sortOrder: 0, targetColumn: null },
+      { key: 'daily_attendance', label: 'Daily attendance (days 1–31)', dataType: 'string', required: null, sortOrder: 1, targetColumn: null },
     ])
   })
 
@@ -113,14 +114,14 @@ describe('buildFieldsFromInstructions', () => {
     expect(fields.map((f) => f.dataType)).toEqual(['date', 'string'])
   })
 
-  it('treats anything other than literal true as not required', async () => {
+  it('leaves Required or Optional for the user to choose, whatever the AI says', async () => {
     mockPropose.mockResolvedValue([
       { key: 'a', label: 'A', dataType: 'string', required: 'yes' },
-      { key: 'b', label: 'B', dataType: 'string' },
+      { key: 'b', label: 'B', dataType: 'string', required: true },
     ])
 
     const fields = await buildFieldsFromInstructions('x', [])
-    expect(fields.map((f) => f.required)).toEqual([false, false])
+    expect(fields.map((f) => f.required)).toEqual([null, null])
   })
 
   it('skips entries with no usable label and keeps sort order contiguous', async () => {
@@ -131,7 +132,7 @@ describe('buildFieldsFromInstructions', () => {
     ])
 
     expect(await buildFieldsFromInstructions('x', [])).toEqual([
-      { key: 'b', label: 'B', dataType: 'string', required: false, sortOrder: 0, targetColumn: null },
+      { key: 'b', label: 'B', dataType: 'string', required: null, sortOrder: 0, targetColumn: null },
     ])
   })
 

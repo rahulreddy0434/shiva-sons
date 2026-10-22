@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pageStatuses } from './page-status'
+import { groupPageStatuses, pageRanges, pageStatuses } from './page-status'
 
 const page = (pageNumber: number, recordCount = 0, hasText = true) => ({ pageNumber, hasText, recordCount })
 
@@ -42,5 +42,31 @@ describe('pageStatuses', () => {
     expect(pageStatuses(1, [page(1, 0, false)], { extracted: true, purged: true })[0].label).toBe('original removed')
     // Records made before removal are still counted
     expect(pageStatuses(1, [page(1, 1, false)], { extracted: true, purged: true })[0].label).toBe('1 record')
+  })
+})
+
+describe('pageRanges', () => {
+  it('folds runs of pages into ranges', () => {
+    expect(pageRanges([1, 2, 3, 5, 7, 8])).toBe('1–3, 5, 7–8')
+    expect(pageRanges([4])).toBe('4')
+    expect(pageRanges([])).toBe('')
+  })
+})
+
+describe('groupPageStatuses', () => {
+  it('reads a 200-page document as a few lines, problems first', () => {
+    const read = Array.from({ length: 198 }, (_, i) => page(i + 1, i % 2 === 0 ? 1 : 0))
+    const groups = groupPageStatuses(pageStatuses(200, read, { extracted: true, purged: false }))
+    expect(groups.map((g) => [g.pages, g.label, g.attention])).toEqual([
+      ['Pages 199–200', 'not read yet', true],
+      [`Pages ${Array.from({ length: 99 }, (_, i) => i * 2 + 1).join(', ')}`, 'records found', false],
+      [`Pages ${Array.from({ length: 99 }, (_, i) => i * 2 + 2).join(', ')}`, 'part of the card on the page before', false],
+    ])
+  })
+
+  it('says Page for a single page', () => {
+    expect(groupPageStatuses(pageStatuses(1, [page(1, 1)], { extracted: true, purged: false }))).toMatchObject([
+      { pages: 'Page 1', label: 'records found', count: 1 },
+    ])
   })
 })

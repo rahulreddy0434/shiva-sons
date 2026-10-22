@@ -42,11 +42,11 @@ export function RemoveDocumentButton({
         type="button"
         onClick={handleRemove}
         disabled={removing}
-        className="text-xs text-danger hover:underline disabled:opacity-60"
+        className="text-sm border border-danger text-danger rounded-md px-3 py-1 hover:bg-brand-soft disabled:opacity-60"
       >
         {removing ? 'Removing…' : 'Remove'}
       </button>
-      {error && <span className="text-xs text-danger">✕ {error}</span>}
+      {error && <span className="basis-full text-sm text-danger">✕ {error}</span>}
     </>
   )
 }
