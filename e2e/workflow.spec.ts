@@ -41,9 +41,9 @@ test('public pages are open and the app is not', async ({ page }) => {
   await shot(page, '00-home')
 
   await page.goto('/privacy')
-  await expect(page.getByText('Initial draft')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Privacy policy')
   await page.goto('/terms')
-  await expect(page.getByText('Initial draft')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Terms of use')
 
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/sign-in/)

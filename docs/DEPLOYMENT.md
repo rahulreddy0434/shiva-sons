@@ -1,7 +1,7 @@
 # Deploying to Vercel
 
 A step-by-step guide to putting the app online so customers can use it.
-Steps 1–3 are done once; step 6 is repeated for every later release.
+Steps 1–3 and 6 are done once; steps 7–8 are repeated for every later release.
 
 What already suits Vercel, so you do not need to change anything:
 
@@ -46,8 +46,8 @@ supabase migration list --linked
 ```
 
 Every migration in `supabase/migrations/` must show a time in the Remote
-column. The latest release adds `field_required_choice` (a field's Required /
-Optional is now a choice the user must make; existing fields keep theirs).
+column. The latest release adds `field_ocr_confidence` (how clearly each value's
+writing was read). Apply it **before** merging: the new code saves that column.
 
 ## 2. Create the Vercel project
 
@@ -105,22 +105,60 @@ step their links point at the wrong place. (On 2026-10-16 reset links still
 went to a Vercel login page for a `…vercel.app` deployment address: this step
 had not been done.)
 
-**Emails.** Supabase's built-in email sender allows only a few messages an
-hour and is meant for testing; on the live site sign-up and password reset
-were refused with "email rate limit exceeded". Before customers sign up, add
-your own sender. With Resend's free plan (100 emails a day):
+### Email links that work on any device
 
-1. resend.com → sign up → **Domains → Add domain**, and add the DNS records it
-   shows at your domain registrar. Resend only sends to other people's
-   addresses from a domain you own, so this needs your own domain (step 5).
-2. Resend → **API Keys → Create API key** (sending access).
+Supabase's standard email links only work in the browser that asked for the
+email, so a link opened on a phone, or in another browser, fails. Change both
+templates so the link goes to the app's `/auth/confirm` page, which checks it
+on the server:
+
+Supabase → **Authentication → Emails → Templates**:
+
+- **Confirm signup**, message body:
+
+  ```html
+  <h2>Confirm your email</h2>
+  <p>Follow this link to finish creating your Shiva Sons Technologies account:</p>
+  <p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">Confirm my email</a></p>
+  <p>If you did not sign up, you can ignore this email.</p>
+  ```
+
+- **Reset password**, message body:
+
+  ```html
+  <h2>Reset your password</h2>
+  <p>Follow this link to choose a new password for your Shiva Sons Technologies account:</p>
+  <p><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery">Choose a new password</a></p>
+  <p>If you did not ask for this, you can ignore this email; your password stays the same.</p>
+  ```
+
+`{{ .SiteURL }}` is the Site URL above, so it must be the live address.
+Emails already sent with the old template still work, in the same browser only.
+
+### The email sender
+
+Supabase's built-in email sender allows only a few messages an hour for the
+whole site and is meant for testing; on the live site sign-up and password
+reset were refused with "email rate limit exceeded". Until you have your own
+domain, send through a Gmail account (about 500 emails a day):
+
+1. Use a Gmail account for the business (a new one is best, e.g.
+   `shivasons.notifications@gmail.com`). Turn on 2-Step Verification:
+   myaccount.google.com → **Security**.
+2. myaccount.google.com/apppasswords → create an app password named
+   "Supabase". Copy the 16 characters; Google shows them once.
 3. Supabase → **Authentication → Emails → SMTP Settings → Enable custom SMTP**:
-   host `smtp.resend.com`, port `465`, username `resend`, password = the API
-   key, sender email e.g. `no-reply@<your domain>`, sender name `Shiva Sons`.
-4. Supabase → **Authentication → Rate Limits**: raise "emails per hour" (for
-   example to 30).
-5. Sign up with a real address of your own and check the email arrives and its
-   link opens the live site.
+   host `smtp.gmail.com`, port `465`, username = the full Gmail address,
+   password = the app password, sender email = the same Gmail address, sender
+   name `Shiva Sons Technologies`. Save.
+4. Supabase → **Authentication → Rate Limits**: set "emails per hour" to 30.
+5. Sign up with an address of your own, open the email **on your phone**, and
+   check it says "Your email is confirmed". Then try "Forgot password" the same way.
+
+Later, with your own domain, switch to Resend (free for 100 a day): resend.com
+→ **Domains → Add domain** (add its DNS records at your registrar) → **API
+Keys → Create**, then in SMTP Settings use host `smtp.resend.com`, port `465`,
+username `resend`, the API key as the password, and `no-reply@<your domain>`.
 
 ## 4. Check the live site
 
@@ -143,13 +181,49 @@ Vercel → project → **Settings → Domains → Add**, enter the domain, and a
 DNS records Vercel shows at the company you bought the domain from. Then
 repeat step 3 with the new address.
 
-## 6. Releasing changes later
+## 6. Monitoring
+
+**Errors (Sentry, free for 5,000 errors a month).**
+
+1. sentry.io → sign up → **Create project** → platform **Next.js**, name
+   `shiva-sons`. Turn on email alerts for new issues (the default).
+2. Copy the **DSN** (Project Settings → Client Keys), and note the organisation
+   slug and project name.
+3. Vercel → Settings → Environment Variables, for Production and Preview:
+   `NEXT_PUBLIC_SENTRY_DSN` = the DSN, `SENTRY_ORG` = the organisation slug,
+   `SENTRY_PROJECT` = `shiva-sons`. Optional, for readable stack traces:
+   `SENTRY_AUTH_TOKEN` (Sentry → Settings → Auth Tokens). Redeploy.
+
+Without the DSN the app sends nothing. Reports go through the site's own
+`/monitoring` address and leave out document contents, emails, cookies,
+request bodies and link tokens (`lib/monitoring`). The AI being busy or out of
+quota is not reported, since the user is already told.
+
+**Uptime (UptimeRobot, free).** uptimerobot.com → sign up → **Add New
+Monitor** → type **Keyword**, URL `https://shiva-sons.vercel.app/api/health`,
+keyword `"status":"ok"`, every 5 minutes, alert by email. It warns you when the
+site, or its database, stops answering.
+
+## 7. Checking a deployment before merging
+
+Vercel puts preview addresses behind its own sign-in. To let the automated
+check in:
+
+1. Vercel → project → **Settings → Deployment Protection → Protection Bypass
+   for Automation** → **Add Secret** → copy it.
+2. Add it to your own `.env.local` (never commit it, never paste it in chat):
+   `VERCEL_AUTOMATION_BYPASS_SECRET=<the secret>`
+3. Run, with the preview address from the pull request:
+   `SMOKE_URL=https://<preview>.vercel.app npm run test:smoke`
+   (without `SMOKE_URL` it checks the live site). It signs in as the test
+   account, runs a job with real reading and extraction, and deletes it.
+
+## 8. Releasing changes later
 
 Vercel builds every branch you push and gives it a preview address; a merge
 into `main` updates the live site automatically.
 
-1. Work on a branch, push it, and open the preview link Vercel posts on the
-   pull request to check it.
+1. Work on a branch, push it, and check its preview (step 7).
 2. If the release adds files under `supabase/migrations/`, run
    `supabase db push` **before** merging (migrations are additive, so the
    running site keeps working).

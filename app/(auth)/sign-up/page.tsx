@@ -26,10 +26,15 @@ export default function SignUpPage() {
 
     setLoading(true)
     const supabase = createClient()
-    const { error } = await supabase.auth.signUp({ email, password })
+    // The link in the email comes back to /auth/confirm, which signs them in on any device
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/auth/confirm` },
+    })
     setLoading(false)
     if (error) { setError(friendlyAuthError(error.message)); return }
-    setMessage('Check your email to confirm your account, then sign in.')
+    setMessage(`We sent a confirmation link to ${email}. Open it on any device to finish signing up. It can take a minute to arrive; check your spam folder too.`)
   }
 
   return (
@@ -64,6 +69,11 @@ export default function SignUpPage() {
         className="w-full bg-brand text-white rounded-md py-2 text-sm font-medium disabled:opacity-60">
         {loading ? 'Creating account…' : 'Sign up'}
       </button>
+      <p className="text-xs text-center text-ink-muted">
+        By signing up you agree to the{' '}
+        <Link href="/terms" className="text-brand-blue hover:underline">Terms</Link> and the{' '}
+        <Link href="/privacy" className="text-brand-blue hover:underline">Privacy policy</Link>.
+      </p>
       <p className="text-sm text-center text-ink-muted">
         Already have an account? <Link href="/sign-in" className="text-brand-blue hover:underline">Sign in</Link>
       </p>

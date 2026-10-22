@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { loadJobExportData, refreshJobStatus } from '@/lib/review/load-job'
-import { approvalBlockers, resolveExportColumns, summarizeRecords } from '@/lib/review/job-summary'
+import { approvalBlockers, documentsLeftOut, resolveExportColumns, summarizeRecords } from '@/lib/review/job-summary'
 
 /**
  * Records the user's explicit sign-off on the reviewed data.
- * Body: { sheetId } — the worksheet the export will fill.
+ * Body: { sheetId, withoutDocuments? } — the worksheet the export will fill, and
+ * true when the user agreed to approve although some documents were not extracted.
  *
  * Everything is re-checked here on the server; the summary the browser
  * showed is never trusted.
@@ -43,6 +44,17 @@ export async function POST(
   const blockers = approvalBlockers(summary, columns.length)
   if (blockers.length > 0) {
     return NextResponse.json({ error: blockers.join(' ') }, { status: 409 })
+  }
+
+  // Cards in a failed or unfinished document would be missing from the export
+  const leftOut = documentsLeftOut(data.documents)
+  if (leftOut.length > 0 && body?.withoutDocuments !== true) {
+    return NextResponse.json(
+      {
+        error: `${leftOut.length} document${leftOut.length === 1 ? ' is' : 's are'} not included (${leftOut.join(', ')}). Retry ${leftOut.length === 1 ? 'it' : 'them'} in Documents, or confirm that you want to approve without ${leftOut.length === 1 ? 'it' : 'them'}.`,
+      },
+      { status: 409 }
+    )
   }
 
   const now = new Date().toISOString()

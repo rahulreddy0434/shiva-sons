@@ -22,7 +22,9 @@ const TIPS = [
   'Original documents are removed 30 days after a job was last changed; your Excel files are kept.',
 ]
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ confirmed?: string }> }) {
+  // /auth/confirm adds ?confirmed=1 after a sign-up link has worked
+  const { confirmed } = await searchParams
   const supabase = await createClient()
   const [{ data: jobs }, { data: exports }, { count: pagesRead }] = await Promise.all([
     supabase.from('extraction_jobs').select('status'),
@@ -50,6 +52,11 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-5xl">
+      {confirmed && (
+        <p role="status" className="mb-5 rounded-md border border-success bg-white px-4 py-2 text-sm text-success">
+          ✓ Your email is confirmed and you are signed in. Welcome! Start with New extraction, or read how it works below.
+        </p>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-medium text-ink">Dashboard</h1>

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitoring/report'
 
 /** What the user sees when the server could not finish something, and no better wording fits. */
 export const GENERIC_FAILURE = 'Something went wrong on our side'
@@ -11,5 +12,6 @@ export const GENERIC_FAILURE = 'Something went wrong on our side'
 export function serverError(userMessage: string, cause: unknown) {
   const detail = cause instanceof Error ? cause.message : (cause as { message?: string } | null)?.message ?? cause
   console.error(`${userMessage}:`, detail)
+  reportError(cause instanceof Error ? cause : new Error(`${userMessage}: ${String(detail)}`), 'api')
   return NextResponse.json({ error: `${userMessage}. Please try again.` }, { status: 500 })
 }

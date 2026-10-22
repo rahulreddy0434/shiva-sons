@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitoring/report'
+import type { NormalizedWord } from '@/lib/azure/document-intelligence'
+import { recordReadConfidence } from '@/lib/extraction/read-confidence'
+import { pagesForRecord, type LocatorPage } from '@/lib/review/source-locator'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { extractStructuredData } from '@/lib/llm/provider'
@@ -69,7 +73,7 @@ export async function POST(request: Request) {
 
   let pagesQuery = supabase
     .from('document_pages')
-    .select('id, page_number, text:ocr_raw->>text, tables:ocr_raw->tables')
+    .select('id, page_number, text:ocr_raw->>text, tables:ocr_raw->tables, words:ocr_raw->words')
     .eq('document_id', documentId)
     .order('page_number', { ascending: true })
   if (ranged) pagesQuery = pagesQuery.gte('page_number', fromPage).lte('page_number', toPage)
@@ -112,6 +116,14 @@ export async function POST(request: Request) {
     // the record already made from its first half
     let previous = ranged && fromPage > 1 ? await lastRecordBefore(supabase, allPages, fromPage) : null
 
+    // Where each record's writing is on its pages, to tell how clearly it was read
+    const locatorPages: LocatorPage[] = pages.map((p) => ({
+      pageNumber: p.page_number,
+      words: (p.words as NormalizedWord[] | null) ?? [],
+      tables: (p.tables as LocatorPage['tables'] | null) ?? [],
+    }))
+    const recordStarts = records.map((r) => Number(r?.page)).filter((n) => Number.isInteger(n))
+
     for (const record of records) {
       const results = normalizeRecord(record?.fields, fields)
       if (isEmptyRecord(results)) continue
@@ -134,6 +146,17 @@ export async function POST(request: Request) {
         .single()
       if (recordError || !recordRow) throw new Error(recordError?.message ?? 'Could not create record')
 
+      const ownPages = pagesForRecord(
+        locatorPages.map((p) => p.pageNumber),
+        startPage.page_number,
+        recordStarts.filter((n) => n !== startPage.page_number)
+      )
+      const readScores = recordReadConfidence(
+        results,
+        fields,
+        locatorPages.filter((p) => ownPages.includes(p.pageNumber))
+      )
+
       const { error: fieldsError } = await supabase.from('extracted_fields').insert(
         results.map((r) => ({
           record_id: recordRow.id,
@@ -141,6 +164,7 @@ export async function POST(request: Request) {
           field_key: r.fieldKey,
           value: r.value,
           confidence: r.confidence,
+          ocr_confidence: readScores.get(r.fieldKey) ?? null,
           status: r.status,
           original_ai_value: r.value,
         }))
@@ -165,6 +189,7 @@ export async function POST(request: Request) {
     const message = describeLlmError(err)
     // Log the cause for the developer, never the document's contents
     console.error(`Extraction failed for document ${documentId}:`, err instanceof Error ? err.message : err)
+    reportError(err, 'extraction')
     await supabase
       .from('uploaded_documents')
       .update({ status: 'failed', error_message: message })

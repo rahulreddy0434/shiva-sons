@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitoring/report'
 import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
 import { chosenSheetId } from '@/lib/excel/sheet-choice'
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
     fields = useColumns ? buildFieldsFromColumns(sheets) : await buildFieldsFromInstructions(instructions, sheets)
   } catch (err) {
     console.error('Schema generation failed:', err instanceof Error ? err.message : err)
+    reportError(err, 'field-generation')
     // Say why (busy, usage limit, …) so the user knows whether retrying will help
     return NextResponse.json({ error: describeLlmError(err) }, { status: 502 })
   }

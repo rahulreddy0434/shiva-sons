@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { requireStep } from '@/lib/extraction/job-progress'
 import { loadJobExportData } from '@/lib/review/load-job'
-import { approvalBlockers, resolveExportColumns, summarizeRecords } from '@/lib/review/job-summary'
+import { approvalBlockers, documentsLeftOut, resolveExportColumns, summarizeRecords } from '@/lib/review/job-summary'
 import { ApprovalPanel, type ExportEntry, type SheetOption } from '@/components/export/approval-panel'
 
 // How long download links stay valid after the page loads
@@ -78,7 +78,7 @@ export default async function ExportStepPage({
         summary={summary}
         documentCount={data.documents.length}
         pageCount={data.documents.reduce((total, d) => total + d.pageCount, 0)}
-        failedDocuments={data.documents.filter((d) => d.status === 'failed').map((d) => d.name)}
+        failedDocuments={documentsLeftOut(data.documents)}
         templateName={data.workbook?.filename ?? null}
         fieldCount={data.fields.length}
         sheets={sheets}

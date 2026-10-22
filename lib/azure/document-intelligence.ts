@@ -10,6 +10,8 @@ export type Box = [number, number, number, number]
 export interface NormalizedWord {
   text: string
   box: Box
+  /** How sure Azure is it read the word right, 0–1. Missing on pages read before it was kept. */
+  confidence?: number
 }
 
 export interface NormalizedTable {
@@ -53,7 +55,7 @@ interface AzureTable {
 interface AzurePage {
   pageNumber: number
   lines?: { content: string }[]
-  words?: { content: string; polygon?: number[] }[]
+  words?: { content: string; polygon?: number[]; confidence?: number }[]
   width?: number
   height?: number
 }
@@ -202,7 +204,8 @@ async function analyzeOnce(buffer: Buffer): Promise<NormalizedDocument> {
         tables: tablesByPage.get(page.pageNumber) ?? [],
         words: (page.words ?? []).flatMap((w) => {
           const box = polygonToBox(w.polygon, page.width ?? 0, page.height ?? 0)
-          return box ? [{ text: w.content, box }] : []
+          if (!box) return []
+          return [typeof w.confidence === 'number' ? { text: w.content, box, confidence: w.confidence } : { text: w.content, box }]
         }),
         width: page.width ?? 0,
         height: page.height ?? 0,

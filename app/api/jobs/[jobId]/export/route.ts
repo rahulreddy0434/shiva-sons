@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitoring/report'
 import { createClient } from '@/lib/supabase/server'
 import { fillTemplate } from '@/lib/excel/fill-template'
 import { loadJobExportData, refreshJobStatus } from '@/lib/review/load-job'
@@ -125,6 +126,7 @@ export async function POST(
     })
   } catch (err) {
     console.error(`Export failed for job ${jobId}:`, err instanceof Error ? err.message : err)
+    reportError(err, 'export')
     return NextResponse.json(
       { error: 'The workbook could not be generated. Nothing was exported — please try again.' },
       { status: 500 }

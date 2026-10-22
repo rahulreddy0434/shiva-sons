@@ -52,6 +52,8 @@ export function ApprovalPanel({
   const router = useRouter()
   const [sheetId, setSheetId] = useState(initialSheetId)
   const [confirming, setConfirming] = useState(false)
+  // Approving while documents were left out takes an explicit tick
+  const [withoutDocuments, setWithoutDocuments] = useState(false)
   const [busy, setBusy] = useState<'approve' | 'export' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exportNote, setExportNote] = useState<string | null>(null)
@@ -145,8 +147,9 @@ export function ApprovalPanel({
 
         {failedDocuments.length > 0 && (
           <p className="mt-3 text-sm text-brand-strong">
-            ⚠ Not included because {failedDocuments.length === 1 ? 'it' : 'they'} could not be processed:{' '}
-            {failedDocuments.join(', ')}. Go back to Documents to retry.
+            ⚠ {failedDocuments.length} document{failedDocuments.length === 1 ? ' is' : 's are'} not included, because{' '}
+            {failedDocuments.length === 1 ? 'it was' : 'they were'} not extracted: {failedDocuments.join(', ')}. Go back to
+            Documents to retry, or confirm below that you want to approve without {failedDocuments.length === 1 ? 'it' : 'them'}.
           </p>
         )}
 
@@ -183,11 +186,25 @@ export function ApprovalPanel({
               {summary.notReviewedCount > 0 &&
                 ` ${summary.notReviewedCount} of them ${summary.notReviewedCount === 1 ? 'has' : 'have'} not been individually marked reviewed.`}
             </p>
+            {failedDocuments.length > 0 && (
+              <label className="mt-3 flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={withoutDocuments}
+                  onChange={(e) => setWithoutDocuments(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Approve without {failedDocuments.length === 1 ? 'this document' : `these ${failedDocuments.length} documents`}:{' '}
+                  {failedDocuments.join(', ')}. Their cards will not be in the Excel file.
+                </span>
+              </label>
+            )}
             <div className="mt-3 flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => post('approve', { sheetId })}
-                disabled={busy !== null}
+                onClick={() => post('approve', { sheetId, withoutDocuments })}
+                disabled={busy !== null || (failedDocuments.length > 0 && !withoutDocuments)}
                 className="bg-brand text-white text-sm font-medium rounded-md px-4 py-2 disabled:opacity-60"
               >
                 {busy === 'approve' ? 'Approving…' : 'Yes, approve'}

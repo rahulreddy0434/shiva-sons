@@ -115,3 +115,12 @@ export function resolveExportColumns(
 
   return { columns, unmapped }
 }
+
+/**
+ * Documents whose data would not be in the export: failed, or never read or
+ * extracted. Approving while there are any needs an explicit "approve
+ * without them", so nobody loses cards from payroll without noticing.
+ */
+export function documentsLeftOut(documents: { name: string; status: string }[]): string[] {
+  return documents.filter((d) => d.status !== 'extraction_complete').map((d) => d.name)
+}
