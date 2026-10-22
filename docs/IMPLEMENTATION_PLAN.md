@@ -139,7 +139,21 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ The same file uploaded twice into a job is refused; template titles merged
   across columns are no longer taken for the heading row; the Excel file
   downloads as soon as it is generated; plain wording for sign-in and server errors
-- ⬜ Legal review of the privacy and terms drafts
+- ✅ Privacy policy and Terms rewritten to match how the service handles data, for
+  customers in the UAE, India and Canada; business details (contact email, address,
+  governing law) are marked placeholders in `lib/legal.ts`
+- ⬜ Legal review of the Privacy policy and Terms, and the placeholders filled in
+- ✅ Email links work on any device: `/auth/confirm` verifies the link on the server
+  (needs the new Supabase email templates, DEPLOYMENT.md step 3); expired or used
+  links explain themselves and offer a new one; a reset link opens the new-password
+  form; sign-in offers to resend an unconfirmed account's email
+- ⬜ Email sender: Gmail SMTP until there is a domain (owner, DEPLOYMENT.md step 3)
+- ✅ Approving while a document was not extracted needs an explicit tick, checked
+  on the server too
+- ✅ Monitoring: Sentry for errors (off until `NEXT_PUBLIC_SENTRY_DSN` is set),
+  `/api/health` for an uptime monitor (owner sets up both accounts)
+- ✅ `npm run test:smoke` checks a deployed site, previews included with Vercel's
+  automation bypass secret
 
 ## Phase 8 — Later
 
@@ -197,6 +211,14 @@ panel on flagged fields, Better Auth if still wanted.
 | 2026-10-22 | Product owner's layout and wording changes: profile menu and Website link top right, new dashboard, Step 2 intro and field editor, Step 3 cards, Step 1 worksheet choice | Browser on the local dev server against the real database, screenshots at 1440 px and 390 px | Pass: no console errors, no sideways scroll on a phone; a three-sheet template saves the chosen sheet and Step 2 then suggests only its columns; the page viewer loads one page at a time; drag with a real mouse and arrow keys both reorder fields. Found and fixed: a one-heading cover sheet was the default worksheet |
 | 2026-10-22 | Unit tests, typecheck, lint, production build | `npm test` (223), `npm run typecheck`, `npm run lint`, `npm run build` | Pass |
 | 2026-10-22 | Undecided Required/Optional fields end to end, after the `field_required_choice` migration | `npm run test:e2e` (3): Approve disabled until every field has a choice, bulk buttons, approve; isolation now also covers the page-text and worksheet routes | Pass |
+| 2026-10-23 | Email links on another device | Links built as the new templates build them (admin-generated token hashes), each opened in a fresh browser at phone size against the real project | Pass: confirmation signs in and shows the welcome; reset opens Set a new password, the new password signs in; a reused link and a broken one explain themselves; next=//evil.example stays on the site |
+| 2026-10-23 | Azure word confidence on the test cards and the owner's demo card | Live Azure | Typed and neat cards: every word 0.95 or more (nothing flagged). Messy phone photo: only the crossed-out cell below 0.6. Demo card: the name word the AI has misread scored 0.31. Dashes for days off scored very low, so marks without letters or digits are ignored |
+| 2026-10-23 | Smoke test against the live site | `npm run test:smoke` (job part; the health check is not deployed yet) | Pass in 3.3 min, real OCR and AI, test job removed |
+| 2026-10-23 | Unit tests, typecheck, lint, production build | `npm test` (239), `npm run typecheck`, `npm run lint`, `npm run build` | Pass |
+| 2026-10-23 | Browser tests after the `field_ocr_confidence` migration | `npm run test:e2e` (4, incl. the new approval test: Yes disabled and the server refusing until "approve without" is ticked) | Pass |
+| 2026-10-23 | Word confidence end to end | Owner's demo card through real Azure + Gemini on the local server | Pass: 30 of 35 values placed and scored (lowest the name, 0.74, so nothing flagged this run); with a stored score set to 0.31, Review shows "The writing for NAME was hard to read (31% sure)" and the document is marked as needing attention. The phone-photo card could not be extracted: Gemini's free daily quota was used up |
+| 2026-10-23 | Smoke test against the new build | `SMOKE_URL=http://localhost:3000 npm run test:smoke` | Pass: pages, security headers, `/api/health`; the job run handled Gemini being out of quota |
+| — | Sentry events reaching sentry.io | Needs the owner's Sentry account and DSN | **Not yet verified** (the `/monitoring` route is reachable signed out) |
 | — | Source highlighting on handwritten or photographed cards | Only typed PDFs tried | **Not yet verified** |
 | 2026-10-13 | Two-page handwritten time card against a 36-column day template | Live Azure + Gemini as a test account; test data deleted afterwards | One record, day cells added up to the card total; the handwritten name was misread without being flagged |
 | 2026-10-13 | Failed extraction shows its reason and can be retried | Gemini was busy on the first attempt | Pass |

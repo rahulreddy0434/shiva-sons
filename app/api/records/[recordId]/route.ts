@@ -38,7 +38,7 @@ export async function PATCH(
 
   const { data: record } = await supabase
     .from('extraction_records')
-    .select('id, job_id, reviewed_at, extracted_fields(id, field_key, value, confidence, status)')
+    .select('id, job_id, reviewed_at, extracted_fields(id, field_key, value, confidence, ocr_confidence, status)')
     .eq('id', recordId)
     .maybeSingle()
   if (!record) {
@@ -66,7 +66,7 @@ export async function PATCH(
   const existing = new Map(record.extracted_fields.map((f) => [f.field_key, f]))
   const current: Record<string, FieldValue> = {}
   for (const f of record.extracted_fields) {
-    current[f.field_key] = { value: f.value, status: f.status, confidence: f.confidence }
+    current[f.field_key] = { value: f.value, status: f.status, confidence: f.confidence, ocrConfidence: f.ocr_confidence }
   }
 
   let changed = 0

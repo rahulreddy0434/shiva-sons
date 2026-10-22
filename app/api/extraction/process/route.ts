@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { reportError } from '@/lib/monitoring/report'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { analyzeDocument } from '@/lib/azure/document-intelligence'
@@ -80,6 +81,7 @@ export async function POST(request: Request) {
         : 'This document could not be read. Check that the file opens normally, then try again.'
     // Log the cause for the developer, never the document's contents
     console.error(`OCR failed for document ${documentId}:`, err instanceof Error ? err.message.slice(0, 300) : err)
+    reportError(err, 'ocr')
     await supabase
       .from('uploaded_documents')
       .update({ status: 'failed', error_message: message })

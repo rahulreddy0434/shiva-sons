@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { approvalBlockers, resolveExportColumns, summarizeRecords, type MappableField } from './job-summary'
+import { approvalBlockers, documentsLeftOut, resolveExportColumns, summarizeRecords, type MappableField } from './job-summary'
 
 const fields: MappableField[] = [
   { key: 'id', label: 'ID', dataType: 'string', required: true, sortOrder: 0 },
@@ -125,5 +125,18 @@ describe('resolveExportColumns', () => {
     )
     expect(columns.map((c) => c.fieldKey)).toEqual(['a'])
     expect(unmapped).toEqual(['Id'])
+  })
+})
+
+describe('documentsLeftOut', () => {
+  it('lists every document whose data is not extracted, failed or not', () => {
+    expect(
+      documentsLeftOut([
+        { name: 'a.pdf', status: 'extraction_complete' },
+        { name: 'b.pdf', status: 'failed' },
+        { name: 'c.pdf', status: 'ocr_complete' },
+        { name: 'd.pdf', status: 'uploaded' },
+      ])
+    ).toEqual(['b.pdf', 'c.pdf', 'd.pdf'])
   })
 })

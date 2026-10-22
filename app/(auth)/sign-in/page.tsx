@@ -13,24 +13,44 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Signed up but never confirmed: offer to send the email again
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [resent, setResent] = useState<string | null>(null)
   const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setResent(null)
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
+    setUnconfirmed(/email not confirmed/i.test(error?.message ?? ''))
     if (error) { setError(friendlyAuthError(error.message)); return }
     router.push('/dashboard')
     router.refresh()
+  }
+
+  async function resendConfirmation() {
+    const { error } = await createClient().auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/confirm` },
+    })
+    setResent(error ? friendlyAuthError(error.message) : `A new confirmation link is on its way to ${email}.`)
   }
 
   return (
     <form onSubmit={handleSubmit} className="bg-white border border-line rounded-lg p-7 space-y-4">
       <h1 className="text-lg font-medium">Sign in</h1>
       {error && <p className="text-sm text-danger">{error}</p>}
+      {unconfirmed && !resent && (
+        <button type="button" onClick={resendConfirmation} className="text-sm text-brand-blue hover:underline">
+          Send the confirmation email again
+        </button>
+      )}
+      {resent && <p className="text-sm text-ink-muted">{resent}</p>}
       <div>
         <label className="block text-sm font-medium mb-1">Email</label>
         <input type="email" required value={email} onChange={e => setEmail(e.target.value)}

@@ -187,7 +187,35 @@ the required fields, or, when the user marked none (the usual case with
 Employee Number) plus any period field (Week Ending, Month, Date), so the same
 person's different weeks are not flagged (`identifyingFields`).
 
-Known gap, tracked in the implementation plan: Azure's word confidence is discarded.
+Azure's confidence for each word is kept with the page. At extraction each
+value is placed on its record's pages with the source locator (its day cell,
+or the words that spell it), and the least sure word there is stored as
+`extracted_fields.ocr_confidence` (`lib/extraction/read-confidence.ts`).
+Below 0.6, Review shows "The writing for … was hard to read". Marks with no
+letters or digits (a dash for a day off) are ignored; values that cannot be
+placed, and pages read before this was kept, have no score and raise nothing.
+
+## Sign-in links
+
+Email links land on `/auth/confirm` (`app/auth/confirm/route.ts`). With the
+token-hash templates in DEPLOYMENT.md it verifies the link on the server, so it
+works on any device; a `?code=` link from the default templates only works in
+the browser that asked for it. It signs the person in and sends them on
+(`lib/auth/confirm-link.ts`): after sign-up to the dashboard with a welcome,
+after a reset to the new-password form; a failed link goes to `/link-problem`,
+which can send a new one. `/reset-password`, `/link-problem` and `/auth/*` are
+open whether or not someone is signed in.
+
+## Monitoring
+
+`instrumentation.ts` and `instrumentation-client.ts` start Sentry when
+`NEXT_PUBLIC_SENTRY_DSN` is set; otherwise nothing is sent. Routes that catch a
+failure and answer politely report it with `reportError`
+(`lib/monitoring/report.ts`), except the AI being busy or out of quota. Events
+are stripped of cookies, bodies, headers, query strings and user details
+before they leave (`lib/monitoring/rules.ts`), and travel through `/monitoring`
+on the site itself, which the proxy lets through. `/api/health` answers the
+uptime monitor without a session.
 
 ## LLM provider and cost
 

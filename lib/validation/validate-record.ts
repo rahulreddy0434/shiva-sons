@@ -1,4 +1,5 @@
 import type { ExtractionField } from '@/types/extraction'
+import { HARD_TO_READ_THRESHOLD } from '@/lib/extraction/read-confidence'
 
 export type IssueSeverity = 'blocking' | 'warning'
 
@@ -29,6 +30,8 @@ export interface FieldValue {
   /** The AI's own status for the value; 'user_corrected' once a person has edited it. */
   status?: string | null
   confidence?: number | null
+  /** How sure the OCR was about the writing the value came from (see lib/extraction/read-confidence.ts). */
+  ocrConfidence?: number | null
 }
 
 /** Below this the AI's value is shown as uncertain until a person confirms or corrects it. */
@@ -102,6 +105,16 @@ export function validateField(field: ExtractionField, current: FieldValue | unde
       type: 'ambiguous',
       severity: 'warning',
       message: `${field.label} was hard to read — check it against the document.`,
+    }
+  }
+
+  // The writing itself was unclear: say so, as that is what to look at on the card
+  if (typeof current?.ocrConfidence === 'number' && current.ocrConfidence < HARD_TO_READ_THRESHOLD) {
+    return {
+      fieldKey: field.key,
+      type: 'ambiguous',
+      severity: 'warning',
+      message: `The writing for ${field.label} was hard to read (${Math.round(current.ocrConfidence * 100)}% sure). Check it against the document.`,
     }
   }
 

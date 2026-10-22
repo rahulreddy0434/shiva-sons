@@ -98,6 +98,14 @@ describe('validateField', () => {
     expect(validateField(field(), { value: 'John', status: 'user_corrected', confidence: 0.2 })).toBeNull()
   })
 
+  it('says when the writing itself was hard to read, even if the AI was sure', () => {
+    const issue = validateField(field({ label: 'Day 3' }), { value: '6', status: 'extracted', confidence: 0.95, ocrConfidence: 0.35 })
+    expect(issue).toMatchObject({ type: 'ambiguous', severity: 'warning' })
+    expect(issue!.message).toBe('The writing for Day 3 was hard to read (35% sure). Check it against the document.')
+    expect(validateField(field(), { value: '6', status: 'extracted', confidence: 0.95, ocrConfidence: 0.6 })).toBeNull()
+    expect(validateField(field(), { value: '6', status: 'user_corrected', confidence: 0.95, ocrConfidence: 0.1 })).toBeNull()
+  })
+
   it('does not warn about confidence when none was recorded', () => {
     expect(validateField(field(), { value: 'John', status: 'extracted', confidence: null })).toBeNull()
     expect(validateField(field(), { value: 'John' })).toBeNull()

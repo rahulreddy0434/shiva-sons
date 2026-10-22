@@ -54,7 +54,7 @@ export async function loadJobExportData(supabase: Supabase, jobId: string): Prom
       .order('created_at', { ascending: true }),
     supabase
       .from('extraction_records')
-      .select('id, document_page_id, reviewed_at, created_at, extracted_fields(field_key, value, confidence, status)')
+      .select('id, document_page_id, reviewed_at, created_at, extracted_fields(field_key, value, confidence, ocr_confidence, status)')
       .eq('job_id', jobId)
       .order('created_at', { ascending: true }),
     supabase
@@ -96,7 +96,7 @@ export async function loadJobExportData(supabase: Supabase, jobId: string): Prom
       id: r.id,
       reviewed: r.reviewed_at !== null,
       values: Object.fromEntries(
-        r.extracted_fields.map((f) => [f.field_key, { value: f.value, status: f.status, confidence: f.confidence }])
+        r.extracted_fields.map((f) => [f.field_key, { value: f.value, status: f.status, confidence: f.confidence, ocrConfidence: f.ocr_confidence }])
       ) as Record<string, FieldValue>,
     }))
 

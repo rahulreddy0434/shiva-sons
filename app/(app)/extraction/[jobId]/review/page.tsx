@@ -39,7 +39,7 @@ export default async function ReviewStepPage({
       .order('created_at', { ascending: true }),
     supabase
       .from('extraction_records')
-      .select('id, document_page_id, reviewed_at, source, extracted_fields(field_key, value, confidence, status, original_ai_value)')
+      .select('id, document_page_id, reviewed_at, source, extracted_fields(field_key, value, confidence, ocr_confidence, status, original_ai_value)')
       .eq('job_id', jobId)
       .order('created_at', { ascending: true }),
   ])
@@ -89,7 +89,7 @@ export default async function ReviewStepPage({
     values: Object.fromEntries(
       r.extracted_fields.map((f) => [
         f.field_key,
-        { value: f.value, status: f.status, confidence: f.confidence, original: f.original_ai_value },
+        { value: f.value, status: f.status, confidence: f.confidence, ocrConfidence: f.ocr_confidence, original: f.original_ai_value },
       ])
     ),
   }))
