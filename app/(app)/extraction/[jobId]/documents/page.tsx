@@ -3,41 +3,41 @@ import { requireStep } from '@/lib/extraction/job-progress'
 import { DocumentDropzone } from '@/components/upload/document-dropzone'
 import { ProcessButton } from '@/components/extraction/process-button'
 import { ExtractButton } from '@/components/extraction/extract-button'
-import { pageStatuses, type PageState } from '@/lib/extraction/page-status'
+import { PageViewer } from '@/components/extraction/page-viewer'
+import { RetryDocumentButton } from '@/components/extraction/retry-document-button'
+import { groupPageStatuses, pageStatuses, type PageState } from '@/lib/extraction/page-status'
 import { RemoveDocumentButton } from '@/components/upload/remove-document-button'
-import { formatBytes } from '@/lib/documents/validate-upload'
+import { formatBytes, MAX_DOCUMENT_BYTES, MAX_UPLOAD_TOTAL_BYTES } from '@/lib/documents/validate-upload'
 import { purgedDocumentIds, RETENTION_DAYS } from '@/lib/retention'
 
-const PAGE_CHIP: Record<PageState, string> = {
+const PAGE_GROUP: Record<PageState, string> = {
   records: 'border-success text-success',
   continues: 'border-line text-ink-muted',
   read: 'border-brand-blue text-brand-blue',
-  not_read: 'border-line text-ink-faint',
+  not_read: 'border-line text-ink-muted',
   removed: 'border-line text-ink-faint',
   empty: 'border-brand bg-brand-soft text-brand-strong',
 }
+
+/** A page list longer than this is shown as a count, with the page numbers on hover. */
+const MAX_RANGE_TEXT = 60
 
 interface PageRow {
   id: string
   document_id: string
   page_number: number
-  // Only the read text: the stored word positions are for the review screen
-  text: string | null
-  extraction_records: {
-    id: string
-    status: string
-    extracted_fields: { field_key: string; value: string | null; confidence: number | null; status: string }[]
-  }[]
+  // Only what the summary needs; a page's text is loaded when the user opens it
+  extraction_records: { id: string }[]
 }
 
-const STATUS_TEXT: Record<string, string> = {
-  uploaded: 'Uploaded — not read yet',
-  processing: 'Being read…',
-  ocr_complete: 'Read — data not extracted yet',
-  extraction_complete: '✓ Data extracted',
-  needs_review: 'Needs review',
-  completed: '✓ Done',
-  failed: '✕ Failed',
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  uploaded: { label: 'Uploaded, not read yet', className: 'border-line text-ink-muted' },
+  processing: { label: 'Being read…', className: 'border-brand-blue text-brand-blue' },
+  ocr_complete: { label: 'Read, data not extracted yet', className: 'border-brand-blue text-brand-blue' },
+  extraction_complete: { label: '✓ Data extracted', className: 'border-success text-success' },
+  needs_review: { label: 'Needs review', className: 'border-brand text-brand-strong' },
+  completed: { label: '✓ Done', className: 'border-success text-success' },
+  failed: { label: '✕ Failed', className: 'border-danger bg-brand-soft text-danger' },
 }
 
 export default async function DocumentsStepPage({
@@ -59,7 +59,7 @@ export default async function DocumentsStepPage({
   if (documents && documents.length > 0) {
     const { data: pages } = await supabase
       .from('document_pages')
-      .select('id, document_id, page_number, text:ocr_raw->>text, extraction_records(id, status, extracted_fields(field_key, value, confidence, status))')
+      .select('id, document_id, page_number, extraction_records(id)')
       .in('document_id', documents.map((d) => d.id))
       .order('page_number', { ascending: true })
 
@@ -83,116 +83,138 @@ export default async function DocumentsStepPage({
     .filter((d) => d.status === 'ocr_complete' || (d.status === 'failed' && hasPages(d.id)))
     .map((d) => ({ id: d.id, pageCount: pagesByDocument.get(d.id)?.length ?? 1 }))
 
+  const extractedCount = documents?.filter((d) => d.status === 'extraction_complete').length ?? 0
+  const failedCount = documents?.filter((d) => d.status === 'failed').length ?? 0
+  const pagesRead = documents?.reduce((total, d) => total + (pagesByDocument.get(d.id)?.length ?? 0), 0) ?? 0
+  const pageTotal = documents?.reduce((total, d) => total + d.page_count, 0) ?? 0
+
   return (
     <div className="max-w-4xl">
       <p className="text-sm text-ink-muted mb-4">Step 3 of 5 — Documents</p>
+
+      <div className="mb-4 rounded-lg border border-brand-blue bg-brand-blue-soft px-4 py-3 text-sm">
+        <p className="font-medium text-ink">What to upload</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5 text-ink-muted">
+          <li>
+            Timecards or timesheets as <span className="text-ink">PDF, JPG or PNG</span>: scans, phone photos or PDFs.
+            Typed and handwritten cards both work.
+          </li>
+          <li>
+            A PDF can hold many cards, one or two pages each. Photos work best flat, well lit and with the whole card
+            in view.
+          </li>
+          <li>
+            Up to <span className="text-ink">{formatBytes(MAX_DOCUMENT_BYTES)} per file</span> and{' '}
+            <span className="text-ink">{formatBytes(MAX_UPLOAD_TOTAL_BYTES)} per upload</span>. The same file cannot be
+            added twice.
+          </li>
+          <li>
+            Then press <span className="text-ink">Process</span> to read the documents, and{' '}
+            <span className="text-ink">Extract data</span> to fill in your fields.
+          </li>
+        </ul>
+      </div>
+
       <DocumentDropzone jobId={jobId} />
 
       {documents && documents.length > 0 && (
-        <div className="mt-5 space-y-3">
-          <p className="text-sm text-ink">
-            {documents.filter((d) => d.status === 'extraction_complete').length} of {documents.length} document
-            {documents.length === 1 ? '' : 's'} processed ·{' '}
-            {documents.reduce((total, d) => total + (pagesByDocument.get(d.id)?.length ?? 0), 0)} of{' '}
-            {documents.reduce((total, d) => total + d.page_count, 0)} pages read
-            {documents.some((d) => d.status === 'failed') &&
-              ` · ${documents.filter((d) => d.status === 'failed').length} failed`}
-          </p>
-          <p className="text-xs text-ink-muted">
-            Check that these are the right files before processing. To replace one, remove it and upload the new file.
-          </p>
-          {documents.map((doc) => (
-            <div key={doc.id} className="border-b border-line pb-2">
-              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm py-1">
-                <span className="min-w-0 break-all">📄 {doc.original_filename}</span>
-                <span className="flex items-center gap-3 text-ink-muted text-xs">
-                  <span>
-                    {doc.file_type.toUpperCase()}
-                    {doc.file_size ? ` · ${formatBytes(doc.file_size)}` : ''} · {doc.page_count} page
-                    {doc.page_count === 1 ? '' : 's'} · {STATUS_TEXT[doc.status] ?? doc.status}
-                  </span>
-                  <RemoveDocumentButton
-                    documentId={doc.id}
-                    name={doc.original_filename}
-                    hasResults={(pagesByDocument.get(doc.id)?.length ?? 0) > 0}
-                  />
-                </span>
-              </div>
+        <div className="mt-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <h2 className="text-base font-medium text-ink">
+              Your documents{' '}
+              <span className="text-sm font-normal text-ink-muted">
+                {extractedCount} of {documents.length} extracted · {pagesRead} of {pageTotal} pages read
+                {failedCount > 0 && <span className="text-danger"> · {failedCount} failed</span>}
+              </span>
+            </h2>
+            <p className="text-xs text-ink-muted">To replace a file, remove it and upload the new one.</p>
+          </div>
 
-              {purged.has(doc.id) && (
-                <p className="text-xs text-ink-muted">
-                  The original file and its read text were removed {RETENTION_DAYS} days after the job was last
-                  changed. The extracted data is still in Review.
-                </p>
-              )}
-
-              {doc.status === 'failed' && !purged.has(doc.id) && (
-                <p className="text-xs text-danger">
-                  ✕ {doc.error_message ?? 'This document could not be processed.'} Use the button below to try again.
-                </p>
-              )}
-
-              <ul aria-label={`Pages of ${doc.original_filename}`} className="mt-1 flex flex-wrap gap-1.5">
-                {pageStatuses(
+          <ul className="space-y-3">
+            {documents.map((doc) => {
+              const pages = pagesByDocument.get(doc.id) ?? []
+              const badge = STATUS_BADGE[doc.status] ?? { label: doc.status, className: 'border-line text-ink-muted' }
+              const groups = groupPageStatuses(
+                pageStatuses(
                   doc.page_count,
-                  (pagesByDocument.get(doc.id) ?? []).map((p) => ({
+                  pages.map((p) => ({
                     pageNumber: p.page_number,
-                    hasText: p.text !== null,
+                    hasText: !purged.has(doc.id),
                     recordCount: p.extraction_records?.length ?? 0,
                   })),
                   { extracted: doc.status === 'extraction_complete', purged: purged.has(doc.id) }
-                ).map((page) => (
-                  <li
-                    key={page.pageNumber}
-                    className={`rounded-full border px-2 py-0.5 text-[11px] ${PAGE_CHIP[page.state]}`}
-                  >
-                    {page.attention && '⚠ '}Page {page.pageNumber} · {page.label}
-                  </li>
-                ))}
-              </ul>
-
-              {pagesByDocument.get(doc.id)?.map((p) => (
-                <div key={p.id}>
-                  <details className="mt-1">
-                    <summary className="text-xs text-brand-blue cursor-pointer">
-                      Page {p.page_number} — view extracted text
-                    </summary>
-                    <div className="mt-2 text-xs bg-surface border border-line rounded p-2 whitespace-pre-wrap">
-                      {p.text ?? 'Removed under the retention policy.'}
+                )
+              )
+              const failed = doc.status === 'failed' && !purged.has(doc.id)
+              return (
+                <li
+                  key={doc.id}
+                  className={`rounded-lg border bg-white px-4 py-3 ${failed ? 'border-danger' : 'border-line'}`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink break-all">{doc.original_filename}</p>
+                      <p className="mt-0.5 text-xs text-ink-muted">
+                        {doc.file_type.toUpperCase()}
+                        {doc.file_size ? ` · ${formatBytes(doc.file_size)}` : ''} · {doc.page_count} page
+                        {doc.page_count === 1 ? '' : 's'}
+                      </p>
                     </div>
-                  </details>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <span className={`rounded-full border px-2.5 py-0.5 text-xs ${badge.className}`}>{badge.label}</span>
+                      {failed && (
+                        <RetryDocumentButton
+                          jobId={jobId}
+                          documentId={doc.id}
+                          stage={pages.length > 0 ? 'extract' : 'read'}
+                          pageCount={pages.length || doc.page_count}
+                        />
+                      )}
+                      <RemoveDocumentButton documentId={doc.id} name={doc.original_filename} hasResults={pages.length > 0} />
+                    </div>
+                  </div>
 
-                  {p.extraction_records && p.extraction_records.length > 0 && (
-                    <details className="mt-1">
-                      <summary className="text-xs text-success cursor-pointer">
-                        Page {p.page_number} — view extracted fields
-                      </summary>
-                      <div className="mt-2 space-y-2">
-                        {p.extraction_records.map((record) => (
-                          <div key={record.id} className="text-xs bg-surface border border-line rounded p-2">
-                            {record.extracted_fields.map((f) => (
-                              <div key={f.field_key} className="flex justify-between py-0.5">
-                                <span className="text-ink-muted">{f.field_key}</span>
-                                <span>
-                                  {f.value ?? <em className="text-ink-faint">missing</em>}{' '}
-                                  <span className="text-ink-faint">
-                                    ({Math.round((f.confidence ?? 0) * 100)}% · {f.status})
-                                  </span>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
+                  {failed && (
+                    <p className="mt-2 rounded-md bg-brand-soft px-3 py-2 text-sm text-danger">
+                      ✕ {pages.length > 0 ? 'Extraction failed' : 'Reading failed'}:{' '}
+                      {doc.error_message ?? 'This document could not be processed.'}
+                    </p>
                   )}
-                </div>
-              ))}
-            </div>
-          ))}
 
-          <ProcessButton pendingDocumentIds={pendingOcrIds} />
-          <ExtractButton jobId={jobId} pendingDocuments={pendingExtract} />
+                  {purged.has(doc.id) && (
+                    <p className="mt-2 text-xs text-ink-muted">
+                      The original file and its read text were removed {RETENTION_DAYS} days after the job was last
+                      changed. The extracted data is still in Review.
+                    </p>
+                  )}
+
+                  {doc.status !== 'uploaded' && (
+                    <ul aria-label={`Pages of ${doc.original_filename}`} className="mt-2 flex flex-wrap gap-1.5">
+                      {groups.map((g) => (
+                        <li
+                          key={g.state}
+                          title={g.pages}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs ${PAGE_GROUP[g.state]}`}
+                        >
+                          {g.attention && '⚠ '}
+                          {g.pages.length > MAX_RANGE_TEXT ? `${g.count} pages` : g.pages} · {g.label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {!purged.has(doc.id) && (
+                    <PageViewer documentId={doc.id} readPages={pages.map((p) => p.page_number)} />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+
+          <div className="mt-4">
+            <ProcessButton pendingDocumentIds={pendingOcrIds} />
+            <ExtractButton jobId={jobId} pendingDocuments={pendingExtract} />
+          </div>
         </div>
       )}
     </div>

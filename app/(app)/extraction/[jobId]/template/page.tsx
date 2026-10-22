@@ -4,6 +4,8 @@ import { ExcelDropzone } from '@/components/upload/excel-dropzone'
 import { StarterTemplateButton } from '@/components/upload/starter-template-button'
 import { HeaderRowForm } from '@/components/upload/header-row-form'
 import { MAX_HEADER_ROW, readSheetPreview, type SheetPreview } from '@/lib/excel/parse-workbook'
+import { SheetChoice } from '@/components/upload/sheet-choice'
+import { chosenSheetId } from '@/lib/excel/sheet-choice'
 
 export default async function TemplateStepPage({
   params,
@@ -42,6 +44,17 @@ export default async function TemplateStepPage({
     sheets = data ?? []
   }
 
+  // Which sheet the records go into, and whether fields were already set up for it
+  const [{ data: job }, { count: schemaCount }] = await Promise.all([
+    supabase.from('extraction_jobs').select('target_sheet_id').eq('id', jobId).maybeSingle(),
+    supabase.from('extraction_schemas').select('id', { count: 'exact', head: true }).eq('job_id', jobId),
+  ])
+  const chosenId = chosenSheetId(
+    sheets.map((s) => ({ id: s.id, columnCount: s.workbook_columns.length })),
+    job?.target_sheet_id
+  )
+  const chosenName = sheets.find((s) => s.id === chosenId)?.sheet_name
+
   // What each worksheet already holds under its headings
   const previews = new Map<string, SheetPreview>()
   if (workbookFile && sheets.length > 0) {
@@ -79,14 +92,31 @@ export default async function TemplateStepPage({
 
       {workbookFile && (
         <div className="mt-6 space-y-5">
-          <p className="text-sm text-ink-muted">
-            This is what we found in your workbook. You choose which worksheet to fill at the last step.
-          </p>
+          {sheets.length > 1 && chosenId ? (
+            <SheetChoice
+              jobId={jobId}
+              chosenId={chosenId}
+              hasFields={(schemaCount ?? 0) > 0}
+              sheets={sheets.map((s) => ({ id: s.id, name: s.sheet_name, columnCount: s.workbook_columns.length }))}
+            />
+          ) : (
+            chosenName && (
+              <p className="text-sm text-ink">
+                Approved records will be added to the worksheet <span className="font-medium">{chosenName}</span>.
+              </p>
+            )
+          )}
+          <p className="text-sm text-ink-muted">This is what we found in your workbook.</p>
           {sheets.map((sheet) => {
             const columns = [...sheet.workbook_columns].sort((a, b) => a.column_index - b.column_index)
             return (
               <div key={sheet.sheet_name}>
-                <p className="text-sm font-medium mb-1">Worksheet: {sheet.sheet_name}</p>
+                <p className="text-sm font-medium mb-1">
+                  Worksheet: {sheet.sheet_name}
+                  {sheets.length > 1 && sheet.id === chosenId && (
+                    <span className="ml-2 rounded-full bg-brand px-2 py-0.5 text-xs text-white">records go here</span>
+                  )}
+                </p>
                 {columns.length === 0 ? (
                   <div className="text-xs text-ink-muted">
                     No column headings found on this worksheet.{' '}

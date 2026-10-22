@@ -51,3 +51,55 @@ export function pageStatuses(
   }
   return result
 }
+
+/** Page numbers as short ranges: [1, 2, 3, 5, 7, 8] → "1–3, 5, 7–8". */
+export function pageRanges(numbers: number[]): string {
+  const sorted = [...new Set(numbers)].sort((a, b) => a - b)
+  const parts: string[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    const start = sorted[i]
+    while (i + 1 < sorted.length && sorted[i + 1] === sorted[i] + 1) i++
+    parts.push(start === sorted[i] ? String(start) : `${start}–${sorted[i]}`)
+  }
+  return parts.join(', ')
+}
+
+export interface PageGroup {
+  state: PageState
+  /** "Pages 1–3, 5" or "Page 4" */
+  pages: string
+  count: number
+  label: string
+  attention: boolean
+}
+
+const GROUP_LABEL: Record<PageState, string> = {
+  records: 'records found',
+  continues: 'part of the card on the page before',
+  read: 'read',
+  not_read: 'not read yet',
+  removed: 'original removed',
+  empty: 'nothing found',
+}
+
+/**
+ * The same page statuses folded into one line per kind, so a 200-page
+ * document reads as a few lines instead of 200 labels. Problems come first.
+ */
+export function groupPageStatuses(statuses: PageStatus[]): PageGroup[] {
+  const order: PageState[] = ['empty', 'not_read', 'records', 'continues', 'read', 'removed']
+  return order.flatMap((state) => {
+    const pages = statuses.filter((s) => s.state === state)
+    if (pages.length === 0) return []
+    const numbers = pages.map((p) => p.pageNumber)
+    return [
+      {
+        state,
+        pages: `${numbers.length === 1 ? 'Page' : 'Pages'} ${pageRanges(numbers)}`,
+        count: pages.length,
+        label: GROUP_LABEL[state],
+        attention: pages.some((p) => p.attention),
+      },
+    ]
+  })
+}

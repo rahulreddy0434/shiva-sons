@@ -80,21 +80,26 @@ test('create a job, extract, review side by side, approve, export and delete', a
   // Step 2 — fields
   await expect(page).toHaveURL(/\/instructions/)
   await page.getByRole('button', { name: 'Generate fields' }).click()
-  await expect(page.getByText('Fields to extract')).toBeVisible()
+  await expect(page.getByText('Check the fields')).toBeVisible()
   await expect(page.getByLabel('Excel column for Employee name')).toHaveValue(/.+/)
   await shot(page, '02-fields')
-  await page.getByRole('button', { name: 'Approve schema' }).click()
-  await expect(page.getByRole('button', { name: 'Approved ✓' })).toBeVisible()
+  // Approval waits until every field is Required or Optional
+  await expect(page.getByRole('button', { name: 'Approve fields' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Make the suggested fields Required' }).click()
+  await page.getByRole('button', { name: 'Make the rest Optional' }).click()
+  await expect(page.getByText('✓ Every field has a choice')).toBeVisible()
+  await page.getByRole('button', { name: 'Approve fields' }).click()
+  await expect(page.getByRole('button', { name: 'Fields approved ✓' })).toBeVisible()
   await page.getByRole('link', { name: 'Next →' }).click()
 
   // Step 3 — documents
   await expect(page).toHaveURL(/\/documents/)
   await page.locator('input[type=file]').setInputFiles(await syntheticTimecardPdf())
   await expect(page.getByText('✓ Uploaded')).toBeVisible()
-  await expect(page.getByText('0 of 1 document processed · 0 of 2 pages read')).toBeVisible()
+  await expect(page.getByText('0 of 1 extracted · 0 of 2 pages read')).toBeVisible()
   await page.getByRole('button', { name: /Process 1 document/ }).click()
   await page.getByRole('button', { name: /Extract data from 1 document/ }).click()
-  await expect(page.getByText('1 of 1 document processed · 2 of 2 pages read')).toBeVisible()
+  await expect(page.getByText('1 of 1 extracted · 2 of 2 pages read')).toBeVisible()
   await shot(page, '03-documents')
   await page.getByRole('link', { name: 'Next →' }).click()
 
@@ -193,8 +198,8 @@ test('create a job, extract, review side by side, approve, export and delete', a
   await expect(page.getByText(/✓ Approved on/)).toHaveCount(0)
   await expect(page.getByText('made before the latest changes')).toBeVisible()
 
-  // The dashboard shows the job and its status
-  await page.getByRole('link', { name: 'Dashboard' }).click()
+  // The Jobs page shows the job and its status
+  await page.getByRole('link', { name: 'Jobs', exact: true }).click()
   const row = page.getByRole('row', { name: new RegExp(jobName) })
   await expect(row).toContainText('Needs review')
   await shot(page, '08-dashboard')
@@ -208,14 +213,15 @@ test('create a job, extract, review side by side, approve, export and delete', a
   // Template is already there, so the job opens at Step 2 with the fields waiting to be confirmed
   await expect(page).toHaveURL(/\/instructions/)
   await expect(page.getByLabel('Excel column for Employee name')).toHaveValue(/.+/)
-  await expect(page.getByRole('button', { name: 'Approve schema' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Approve fields' })).toBeEnabled()
   // Nothing from the first job's documents or results came along
   await expect(page.getByText('Finish this step to continue.')).toBeVisible()
   await page.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete job' }).click()
   await expect(page).toHaveURL(/\/dashboard/)
 
-  // Delete the job, with confirmation
+  // Delete the job from the Jobs page, with confirmation
+  await page.getByRole('link', { name: 'Jobs', exact: true }).click()
   await row.getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByRole('alertdialog')).toContainText(jobName)
   await page.getByRole('button', { name: 'Delete job' }).click()

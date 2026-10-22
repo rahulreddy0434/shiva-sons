@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { serverError, GENERIC_FAILURE } from '@/lib/api-error'
 import { createClient } from '@/lib/supabase/server'
+import { approvalProblem } from '@/lib/extraction/required-choice'
 
 /** A field as sent by the editor. */
 interface EditedField {
   key: string
   label: string
   dataType: string
-  required: boolean
+  required: boolean | null
   targetColumnId?: unknown
 }
 
@@ -30,6 +31,18 @@ export async function PATCH(
   }
 
   const body = await request.json()
+
+  // Approving needs a Required or Optional choice on every field: the list
+  // being saved with this request, or the stored one
+  if (body.approved === true) {
+    const toApprove: { label: string; required: boolean | null }[] = Array.isArray(body.fields)
+      ? body.fields
+      : ((
+          await supabase.from('extraction_fields').select('label, required').eq('schema_id', schemaId)
+        ).data ?? [])
+    const problem = approvalProblem(toApprove)
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 })
+  }
 
   // Approving the schema
   if (typeof body.approved === 'boolean') {
@@ -77,7 +90,7 @@ export async function PATCH(
           field_key: f.key,
           label: f.label,
           data_type: f.dataType,
-          required: f.required,
+          required: typeof f.required === 'boolean' ? f.required : null,
           sort_order: index,
           target_column_id: resolveColumn(f),
         }))

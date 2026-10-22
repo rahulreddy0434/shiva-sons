@@ -30,13 +30,21 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Starter timecard template for customers with no workbook
 - ✅ Plain-English instructions → AI-proposed fields → edit → approve
 - ✅ Each field linked to an Excel column, visible and changeable in the field editor
-- ✅ Target worksheet chosen at approval
+- ✅ Target worksheet chosen in Step 1 for a template with several sheets (defaults to the
+  sheet with the most headings); fields and the suggested description use only that
+  sheet; one sheet is filled per export, the others are kept unchanged
 - ✅ The user can correct the detected header row; field links are kept where the heading still exists
 - ✅ Start a new job from a previous job's template, instructions and field list
 - ⬜ A library of saved templates on the dashboard, independent of jobs (open
   question for the product owner: "Start from a previous job" already reuses a template)
 - ✅ Preview of the worksheet's existing rows on Step 1, with how many rows are filled
 - ✅ Template limit of 4 MB, shown on the upload area
+- ✅ Step 2 explains itself at the top and offers the two ways to create fields as
+  labelled choices (template columns recommended, or AI)
+- ✅ Every field must be set to Required or Optional before the fields can be approved
+  (refused by the server too), with bulk buttons and ID/name-like fields suggested as
+  Required; drag-and-drop (or arrow keys) to reorder (needs the
+  `field_required_choice` migration)
 
 ## Phase 3 — Documents and job tracking ✅
 
@@ -50,7 +58,11 @@ Legend: ✅ done · 🟡 partly done · ⬜ not started
 - ✅ Limits shown on the upload area and checked before sending: 20 MB per file,
   100 MB per upload; the storage buckets enforce the per-file limit too
   (needs the `storage_size_limits` migration)
-- ✅ Status for every page of every document (read, records, part of the card before, nothing found)
+- ✅ Status for every page of every document, folded into ranges ("Pages 1–198 · read")
+  so a 200-page document stays short; one page's read text and values load on demand
+  in a page picker instead of the whole document at once
+- ✅ Upload guidance at the top of Step 3; each document as a card with its status,
+  a Retry button on a failed document (at the step it failed) and a Remove button
 
 ## Phase 4 — AI extraction 🟡
 
@@ -182,6 +194,9 @@ panel on flagged fields, Better Auth if still wanted.
 | 2026-10-16 | Break-it checks on the live site | Second account against the first's pages, 9 API routes, storage and tables; bad, empty, oversize and renamed files; script and SQL in a job name; skipped steps | Pass: nothing reached; every bad file refused with a reason. Found and fixed: missing security headers, a raw database message, a 409 instead of 404 |
 | 2026-10-16 | Fixes from the live test | Unit tests; local production build against the real services | Pass: headers present, no policy violations, the demo scan draws in full under the policy, phone picker 324 px wide, merged title skipped (headings on row 3), the same card twice refused, the Excel file downloads by itself, wrong password worded plainly |
 | 2026-10-16 | Unit tests, typecheck, lint, production build, browser tests | `npm test` (204), `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:e2e` (3) | Pass |
+| 2026-10-22 | Product owner's layout and wording changes: profile menu and Website link top right, new dashboard, Step 2 intro and field editor, Step 3 cards, Step 1 worksheet choice | Browser on the local dev server against the real database, screenshots at 1440 px and 390 px | Pass: no console errors, no sideways scroll on a phone; a three-sheet template saves the chosen sheet and Step 2 then suggests only its columns; the page viewer loads one page at a time; drag with a real mouse and arrow keys both reorder fields. Found and fixed: a one-heading cover sheet was the default worksheet |
+| 2026-10-22 | Unit tests, typecheck, lint, production build | `npm test` (223), `npm run typecheck`, `npm run lint`, `npm run build` | Pass |
+| 2026-10-22 | Undecided Required/Optional fields end to end, after the `field_required_choice` migration | `npm run test:e2e` (3): Approve disabled until every field has a choice, bulk buttons, approve; isolation now also covers the page-text and worksheet routes | Pass |
 | — | Source highlighting on handwritten or photographed cards | Only typed PDFs tried | **Not yet verified** |
 | 2026-10-13 | Two-page handwritten time card against a 36-column day template | Live Azure + Gemini as a test account; test data deleted afterwards | One record, day cells added up to the card total; the handwritten name was misread without being flagged |
 | 2026-10-13 | Failed extraction shows its reason and can be retried | Gemini was busy on the first attempt | Pass |
